@@ -17,6 +17,7 @@ import { PROVIDER_IDS } from "./types.js";
 const PROVIDER_SOURCES = [
   "oauth",
   "cli-rpc",
+  "cli-print",
   "api",
   "web",
   "cache",
@@ -74,7 +75,10 @@ export function writeCachedProviders(providers: ProviderQuota[]): void {
     providers
       .filter(
         (provider) =>
-          provider.state.status === "fresh" && provider.windows.length === 0,
+          provider.state.status === "fresh" &&
+          (provider.windows.length === 0 ||
+            (provider.provider === "antigravity" &&
+              !hasTrustedAntigravityWindow(provider))),
       )
       .map((provider) => provider.provider),
   );
@@ -150,14 +154,25 @@ function readCacheProviders(): CachedProvider[] {
 function toCacheProvider(provider: ProviderQuota): CachedProvider | undefined {
   if (provider.state.status !== "fresh" || provider.windows.length === 0)
     return undefined;
+  if (
+    provider.provider === "antigravity" &&
+    (provider.source !== "cli-print" || provider.state.stale)
+  )
+    return undefined;
+  if (
+    provider.provider === "antigravity" &&
+    !hasTrustedAntigravityWindow(provider)
+  )
+    return undefined;
+  const antigravity = provider.provider === "antigravity";
   const snapshot = normalizeCachedProvider(
     {
       provider: provider.provider,
       label: provider.label,
       source: provider.source,
-      plan: provider.plan,
+      ...(antigravity ? {} : { plan: provider.plan }),
+      ...(antigravity ? {} : { credits: provider.credits }),
       windows: provider.windows,
-      credits: provider.credits,
       state: {
         status: provider.state.status,
         stale: false,
@@ -175,6 +190,13 @@ function toCacheProvider(provider: ProviderQuota): CachedProvider | undefined {
       ? { claudeCredentialContextId: claudeCredentialContextId() }
       : {}),
   };
+}
+
+function hasTrustedAntigravityWindow(provider: ProviderQuota): boolean {
+  return provider.windows.some(
+    (window) =>
+      window.percentRemaining !== undefined || window.percentUsed !== undefined,
+  );
 }
 
 function serializeCachedProvider(
@@ -205,6 +227,16 @@ function normalizeCachedProvider(
         .map(normalizeCachedWindow)
         .filter((window): window is QuotaWindow => Boolean(window))
     : [];
+  if (
+    provider === "antigravity" &&
+    (source !== "cli-print" ||
+      state?.status !== "fresh" ||
+      state?.stale !== false ||
+      ["plan", "credits", "account", "attempts", "quotaSemantics"].some((key) =>
+        Object.prototype.hasOwnProperty.call(data, key),
+      ))
+  )
+    return undefined;
   if (
     !provider ||
     !label ||

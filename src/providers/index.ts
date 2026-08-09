@@ -1,4 +1,5 @@
 import { agyAdapter } from "./agy.js";
+import { antigravityAdapter } from "./antigravity.js";
 import { claudeAdapter } from "./claude.js";
 import { codexAdapter } from "./codex.js";
 import { copilotAdapter } from "./copilot.js";
@@ -8,6 +9,7 @@ import { kimiAdapter } from "./kimi.js";
 import { zaiAdapter } from "./zai.js";
 import { zaiCodingPlanAdapter } from "./zai-coding-plan.js";
 import {
+  DEFAULT_PROVIDER_IDS,
   PROVIDER_IDS,
   type ProviderAdapter,
   type ProviderId,
@@ -23,10 +25,11 @@ export const PROVIDERS: Record<ProviderId, ProviderAdapter> = {
   zai: zaiAdapter,
   agy: agyAdapter,
   "zai-coding-plan": zaiCodingPlanAdapter,
+  antigravity: antigravityAdapter,
 };
 
 export function parseProviders(value: string | undefined): ProviderId[] {
-  if (!value) return [...PROVIDER_IDS];
+  if (!value) return [...DEFAULT_PROVIDER_IDS];
   const providers = value
     .split(",")
     .map((item) => item.trim())

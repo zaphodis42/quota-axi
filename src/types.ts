@@ -7,9 +7,23 @@ export type ProviderId =
   | "kimi"
   | "zai"
   | "agy"
-  | "zai-coding-plan";
+  | "zai-coding-plan"
+  | "antigravity";
 
 export const PROVIDER_IDS = [
+  "claude",
+  "codex",
+  "cursor",
+  "copilot",
+  "grok",
+  "kimi",
+  "zai",
+  "agy",
+  "zai-coding-plan",
+  "antigravity",
+] as const satisfies readonly ProviderId[];
+
+export const DEFAULT_PROVIDER_IDS = [
   "claude",
   "codex",
   "cursor",
@@ -24,6 +38,7 @@ export const PROVIDER_IDS = [
 export type ProviderSource =
   | "oauth"
   | "cli-rpc"
+  | "cli-print"
   | "api"
   | "web"
   | "cache"

@@ -74,6 +74,7 @@ const ACCENTS: Record<ProviderId, StyleSpec> = {
   zai: { rgb: [129, 216, 209], ansi16: "96", bold: true },
   agy: { rgb: [232, 184, 109], ansi16: "93", bold: true },
   "zai-coding-plan": { rgb: [203, 166, 247], ansi16: "95", bold: true },
+  antigravity: { rgb: [166, 227, 161], ansi16: "92", bold: true },
 };
 
 const STYLES: Record<Exclude<StyleName, `accent:${ProviderId}`>, StyleSpec> = {

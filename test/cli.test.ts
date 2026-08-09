@@ -61,6 +61,9 @@ describe("CLI flag parsing", () => {
 
   it("scopes comma-separated providers", () => {
     expect(parseFlags(["--provider", "claude"]).providers).toEqual(["claude"]);
+    expect(parseFlags(["--provider", "antigravity"]).providers).toEqual([
+      "antigravity",
+    ]);
     expect(
       parseFlags(["--provider=cursor,copilot,grok,kimi"]).providers,
     ).toEqual(["cursor", "copilot", "grok", "kimi"]);
@@ -157,6 +160,10 @@ describe("CLI flag parsing", () => {
     expect(() => parseFlags(["--provider", "gemini"])).toThrow(
       "unsupported provider",
     );
+  });
+
+  it("documents Antigravity in the supported provider help", () => {
+    expect(TOP_HELP).toContain("antigravity");
   });
 
   it("rejects unknown flags", () => {
