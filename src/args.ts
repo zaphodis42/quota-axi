@@ -241,7 +241,7 @@ function parseProviderScope(value: string | undefined): ProviderId[] {
       error instanceof Error ? error.message : "unsupported provider",
       "VALIDATION_ERROR",
       [
-        "Supported providers: claude, codex, cursor, copilot, grok, kimi, zai-coding-plan",
+        "Supported providers: claude, codex, cursor, copilot, grok, kimi, zai-coding-plan, antigravity",
       ],
     );
   }

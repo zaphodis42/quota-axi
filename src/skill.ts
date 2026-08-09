@@ -3,7 +3,7 @@ import { DESCRIPTION, TOP_HELP } from "./cli.js";
 // Trigger string Claude Code (and other agents) match against to auto-load the skill.
 // Kept terse and outcome-focused so it fires on "check quota/rate limits" intents.
 export const SKILL_DESCRIPTION =
-  "Report local Claude, Codex, Cursor, GitHub Copilot, Grok, Kimi, and Z.ai Coding Plan quota windows via the quota-axi CLI - remaining " +
+  "Report local Claude, Codex, Cursor, GitHub Copilot, Grok, Kimi, Z.ai Coding Plan, and explicit-only Antigravity quota windows via the quota-axi CLI - remaining " +
   "effective usable runway, percentages, reset times, cycle-average pace vs the reset clock, and provider status read from local auth sources, " +
   "with no routing, provider mutation, or default ordering preference. Use before deciding whether it is safe " +
   "to keep spending a provider's quota, when the user asks about usage, rate limits, pace, or " +
@@ -25,6 +25,7 @@ export const HERMES_TAGS = [
   "grok",
   "kimi",
   "zai",
+  "antigravity",
   "cli",
 ];
 export const HERMES_CATEGORY = "observability";
@@ -64,7 +65,11 @@ route, proxies, intercepts, logs in, imports browser cookies, or mutates provide
 output has no ordering preference. The explicit \`models --sort runway\` comparator only orders
 quota evidence, preserves ties, and is never a recommendation. It reads local provider auth sources and calls
 first-party provider quota, usage, billing, or entitlement endpoints; it never launches the
-Claude, Grok, Pi, or Kimi CLIs, so it cannot spend the quota it measures.
+Claude, Grok, Pi, or Kimi CLIs. Antigravity is explicit-only and runs only the documented
+1.1.11+ \`agy -p "/usage" --output-format json\` print command. The child uses the real home and
+minimal current-user session for its existing system-keyring auth, with temporary XDG storage and
+cwd; quota-axi never reads or copies Antigravity credentials and never refreshes auth, calls a
+private RPC, starts a model turn, or launches a second command.
 
 ## When to use
 
@@ -76,7 +81,9 @@ or when comparing supported local provider headroom side by side.
 
 1. Run \`npx -y quota-axi\` for compact TOON output covering supported providers' quota windows.
 2. Scope to one provider with \`--provider claude\` or to a subset with
-   \`--provider cursor,copilot,grok,kimi,zai-coding-plan\`.
+   \`--provider cursor,copilot,grok,kimi,zai-coding-plan\`. Use \`--provider antigravity\` only when
+   an explicit Antigravity print-mode probe is wanted; it is not part of the bare/default provider
+   set.
 3. Pass \`--json\` for the normalized machine-readable model instead of TOON. Read
    \`quotaSemantics.effectiveAvailability\` rather than treating a model window in isolation:
    account windows can bound every model, and \`boundedBy\` names every window included in the
@@ -134,6 +141,14 @@ or when comparing supported local provider headroom side by side.
     auth failure is read from the response envelope, not the HTTP status; an empty, unparseable,
     or limit-less success body reports a fresh snapshot with no windows rather than invented
     percentages.
+11. For Antigravity, quota-axi runs only \`agy -p "/usage" --output-format json\` from CLI 1.1.11+.
+    The child keeps the real HOME/minimal current-user session for the CLI's existing system-keyring
+    auth, with a private temporary cwd and XDG config/cache/state directories removed after every
+    outcome. Auth inspection reports executable availability only; the quota command establishes
+    usability. Live \`5h\` and \`weekly\` buckets receive trusted durations even when groups omit
+    \`id\`. The vendor's signed-out browser fallback is disclosed for maintainer policy; quota-axi
+    never completes login, copies credentials, invokes private RPCs or model turns, or returns raw
+    stderr/JSON/account/plan data.
 
 ## Usage
 
