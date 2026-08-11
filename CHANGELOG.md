@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.1.22](https://github.com/zaphodis42/quota-axi/compare/quota-axi-v0.1.21...quota-axi-v0.1.22) (2026-08-11)
+
+
+### Features
+
+* add cycle-average quota pace signals ([#49](https://github.com/zaphodis42/quota-axi/issues/49)) ([b465eae](https://github.com/zaphodis42/quota-axi/commit/b465eaeb4050e6ae919da7832908e33a9a9e7af8))
+* add release automation and public skill scaffolding ([#2](https://github.com/zaphodis42/quota-axi/issues/2)) ([10b3c46](https://github.com/zaphodis42/quota-axi/commit/10b3c46b2f0a3e1d8562b2a3e1d1dbfae09cb5da))
+* add Z.ai Coding Plan quota provider ([b6c2c46](https://github.com/zaphodis42/quota-axi/commit/b6c2c465404641f09fd268d06be46ef0c1f75429)), closes [#2](https://github.com/zaphodis42/quota-axi/issues/2)
+* **cli:** add human terminal quota report ([#66](https://github.com/zaphodis42/quota-axi/issues/66)) ([7c5bb5e](https://github.com/zaphodis42/quota-axi/commit/7c5bb5e538951973cc4de01a74f55cf0a9aa45a2))
+* **cli:** migrate CLI plumbing to axi-sdk-js ([#20](https://github.com/zaphodis42/quota-axi/issues/20)) ([d59fc2a](https://github.com/zaphodis42/quota-axi/commit/d59fc2ab4e8c94fda2e38f0bbf7fecb72dc60a56))
+* **models:** add intelligence-aware quota evidence ([#64](https://github.com/zaphodis42/quota-axi/issues/64)) ([229ad37](https://github.com/zaphodis42/quota-axi/commit/229ad37fd6ed368b08f76439c1db15959510a4f7))
+* **providers:** add cursor copilot and grok quota reports ([#9](https://github.com/zaphodis42/quota-axi/issues/9)) ([1cf7fd5](https://github.com/zaphodis42/quota-axi/commit/1cf7fd5af7a376389f1943b12011e7d0c1200c55))
+* **providers:** add explicit Antigravity quota reporting ([25ebf13](https://github.com/zaphodis42/quota-axi/commit/25ebf138bec1bbc5b804ab074a508d064c3991c9))
+* **providers:** add explicit-selection-only Antigravity quota provider ([898189c](https://github.com/zaphodis42/quota-axi/commit/898189cba57912f651b5375bb141ee22543945a3))
+* **providers:** add Kimi Code CLI quota fallback ([#31](https://github.com/zaphodis42/quota-axi/issues/31)) ([e21241f](https://github.com/zaphodis42/quota-axi/commit/e21241f43c2e5ccae051f6dce6e7c8901fa27046))
+* **providers:** add Kimi Code quota reporting ([#29](https://github.com/zaphodis42/quota-axi/issues/29)) ([659a2eb](https://github.com/zaphodis42/quota-axi/commit/659a2eb4148418ada055bad831114e31cd6b1ff1))
+* **providers:** add Z.ai Coding Plan quota provider ([d2ea077](https://github.com/zaphodis42/quota-axi/commit/d2ea077fcfdbb74ab1d31037acc323e89a082791))
+* **providers:** isolate managed Claude and Codex profiles ([#22](https://github.com/zaphodis42/quota-axi/issues/22)) ([b81d311](https://github.com/zaphodis42/quota-axi/commit/b81d3119c4f4a0a2ef5b577dd42963aa7da5f404))
+* report effective quota availability ([#41](https://github.com/zaphodis42/quota-axi/issues/41)) ([4760cfd](https://github.com/zaphodis42/quota-axi/commit/4760cfd820670ac42df487b1635b535eec236897))
+* report effective usable runway ([#57](https://github.com/zaphodis42/quota-axi/issues/57)) ([19d0403](https://github.com/zaphodis42/quota-axi/commit/19d04035e4adc2fa8c0ec280ba40d613de56bc22))
+* **tui:** label headline bars with binding windows ([#75](https://github.com/zaphodis42/quota-axi/issues/75)) ([de9d0c0](https://github.com/zaphodis42/quota-axi/commit/de9d0c00ef7757244ed419bd7ef3ae3d2fef0491))
+* **tui:** make the human report live and act on captain feedback, fix Pi Kimi OAuth ([#68](https://github.com/zaphodis42/quota-axi/issues/68)) ([fcc9aa3](https://github.com/zaphodis42/quota-axi/commit/fcc9aa3b11dab333cbcb295bbdece303b730fd4e))
+
+
+### Bug Fixes
+
+* **claude:** pin Keychain reads to current user ([#46](https://github.com/zaphodis42/quota-axi/issues/46)) ([8f65d58](https://github.com/zaphodis42/quota-axi/commit/8f65d58aa0b0efacd0850b9107a8324b122654e3))
+* **cli:** fast-path bare version checks ([#67](https://github.com/zaphodis42/quota-axi/issues/67)) ([f9d5b9f](https://github.com/zaphodis42/quota-axi/commit/f9d5b9f5fdd7d98817f29ef83935acd9b33093d4))
+* **codex:** classify quota windows by exact duration ([1591c58](https://github.com/zaphodis42/quota-axi/commit/1591c585384fe69ac23e822d68f6b6662f6abe62))
+* **codex:** derive window id/label/kind from actual window duration ([47db504](https://github.com/zaphodis42/quota-axi/commit/47db504dab7bf7f623b9e17728caaa0df4c55251))
+* **codex:** identify quota windows by exact duration ([a24b1ff](https://github.com/zaphodis42/quota-axi/commit/a24b1ff246f7b958782da64fb75e07465bd5f28c))
+* execute every PR body compliance event ([#37](https://github.com/zaphodis42/quota-axi/issues/37)) ([e85fdbc](https://github.com/zaphodis42/quota-axi/commit/e85fdbc0b100a1042f50935e467c0c301542e595))
+* **pace:** treat a missing resetsAt on a zero-use window as not-yet-triggered ([#70](https://github.com/zaphodis42/quota-axi/issues/70)) ([3ab4d12](https://github.com/zaphodis42/quota-axi/commit/3ab4d127c5adaa2768f5c2a1320cb14128ae1ad2))
+* **providers:** clean up unread Kimi responses ([#36](https://github.com/zaphodis42/quota-axi/issues/36)) ([b106f0f](https://github.com/zaphodis42/quota-axi/commit/b106f0f2e9f167e9adf2091be25b845b4d6d71b1))
+* **providers:** correct Claude auth and stale quota fallback ([#44](https://github.com/zaphodis42/quota-axi/issues/44)) ([8dd34ee](https://github.com/zaphodis42/quota-axi/commit/8dd34eee84da602844a8c2fac96fe71de158a514))
+* **providers:** correct Codex and Grok auth classification ([#51](https://github.com/zaphodis42/quota-axi/issues/51)) ([d4383e6](https://github.com/zaphodis42/quota-axi/commit/d4383e694472e6f689b26b636ba8a9cb15fef7f6))
+* **providers:** detect Grok OIDC auth records ([#11](https://github.com/zaphodis42/quota-axi/issues/11)) ([7b33cc6](https://github.com/zaphodis42/quota-axi/commit/7b33cc65abbfb923da9fa114a77da34ada9e6079))
+* **providers:** distinguish expired Grok sessions from sign-in required ([#47](https://github.com/zaphodis42/quota-axi/issues/47)) ([83ef9fd](https://github.com/zaphodis42/quota-axi/commit/83ef9fd8b643790d71913c049f7554fd2e75abfc))
+* **providers:** keep Kimi credential inspection read-only ([#33](https://github.com/zaphodis42/quota-axi/issues/33)) ([17eadc9](https://github.com/zaphodis42/quota-axi/commit/17eadc9f3366fb6ba7f027481fbd8d14755220c8))
+* **providers:** parse Pi Kimi credentials directly ([#35](https://github.com/zaphodis42/quota-axi/issues/35)) ([272a7bc](https://github.com/zaphodis42/quota-axi/commit/272a7bc1e6c5edce2f689e51e337762b46160b36))
+* **providers:** report authoritative Grok quota percentages ([#27](https://github.com/zaphodis42/quota-axi/issues/27)) ([17c4bd3](https://github.com/zaphodis42/quota-axi/commit/17c4bd38d258e63313586ac5bc1c0f9ce46fca36))
+* reuse granted Claude Keychain access on plain calls ([#7](https://github.com/zaphodis42/quota-axi/issues/7)) ([029f85f](https://github.com/zaphodis42/quota-axi/commit/029f85fa1c450eaccbc64302a9c723f512081f4b))
+* surface Claude Keychain access guidance ([#5](https://github.com/zaphodis42/quota-axi/issues/5)) ([6d25e11](https://github.com/zaphodis42/quota-axi/commit/6d25e11a3853fd55dab8a6e2668bb438c09c85e6))
+* **tui:** polish --tui exhaustion notes and align two-up card rows ([#72](https://github.com/zaphodis42/quota-axi/issues/72)) ([170dd33](https://github.com/zaphodis42/quota-axi/commit/170dd33065168774ce39584a2e4110df3aa959cb))
+* **zai:** stop retiring cache on undecodable bodies, drop known+unresolved contradiction ([3dd4e34](https://github.com/zaphodis42/quota-axi/commit/3dd4e342ccf35ea7dfadac3b6270c01fb08a8e49))
+
 ## [0.1.21](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.20...quota-axi-v0.1.21) (2026-08-11)
 
 
