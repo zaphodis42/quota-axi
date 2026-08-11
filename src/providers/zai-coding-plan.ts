@@ -456,14 +456,11 @@ function staleZaiReport(
   };
 }
 
-type ZaiEnvelope =
-  | { kind: "empty" }
-  | {
-      kind: "envelope";
-      code: number;
-      success: boolean;
-      data?: Record<string, unknown>;
-    };
+type ZaiEnvelope = {
+  code: number;
+  success: boolean;
+  data?: Record<string, unknown>;
+};
 
 async function requestZaiQuota(
   apiKey: string,
@@ -515,13 +512,13 @@ async function requestZaiQuota(
 
     // Every documented outcome (success or auth failure) is HTTP 200 with a
     // {code, msg, success} envelope. An empty body, an undecodable body, an
-    // unparseable body, or a body with no recognizable envelope fields are
-    // all treated the same: fail soft to an empty-window fresh report
-    // rather than an error, per the "never invent" contract.
+    // unparseable body, or a body with no recognizable envelope fields is
+    // not a provider answer at all -- parseZaiEnvelope throws a
+    // stale-eligible failure for those so a captive portal or a broken
+    // transport can't retire a good cached snapshot. Only a parsed envelope
+    // that legitimately carries no limits (see normalizeZaiLimits) is a
+    // fresh report with windows: [], per the "never invent" contract.
     const envelope = parseZaiEnvelope(bytes);
-    if (envelope.kind === "empty") {
-      return { windows: [], diagnostics: [] };
-    }
 
     if (envelope.code === 401) {
       throw new ZaiFailure("zai_token_expired", {
@@ -556,25 +553,27 @@ async function requestZaiQuota(
 }
 
 function parseZaiEnvelope(bytes: Uint8Array): ZaiEnvelope {
-  if (bytes.length === 0) return { kind: "empty" };
+  if (bytes.length === 0) {
+    throw new ZaiFailure("zai_empty_response", { staleEligible: true });
+  }
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
-    return { kind: "empty" };
+    throw new ZaiFailure("zai_response_invalid_utf8", { staleEligible: true });
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text) as unknown;
   } catch {
-    return { kind: "empty" };
+    throw new ZaiFailure("zai_malformed_json", { staleEligible: true });
   }
   const root = objectValue(parsed);
-  if (!root) return { kind: "empty" };
-  const code = numericScalar(root.code);
-  if (code === undefined) return { kind: "empty" };
+  const code = root ? numericScalar(root.code) : undefined;
+  if (!root || code === undefined) {
+    throw new ZaiFailure("zai_unrecognized_envelope", { staleEligible: true });
+  }
   return {
-    kind: "envelope",
     code,
     success: root.success === true,
     data: objectValue(root.data),

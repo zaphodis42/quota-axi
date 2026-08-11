@@ -467,7 +467,7 @@ describe("quota semantics", () => {
     ]);
   });
 
-  it("computes all-model Z.ai Coding Plan headroom from the two token windows, keeping the MCP window a separate tools bound", () => {
+  it("computes all-model Z.ai Coding Plan headroom from the two token windows, excluding the MCP window from the bound", () => {
     const result = withQuotaSemantics(
       provider("zai-coding-plan", [
         window("five_hour", "session", 99),
@@ -495,6 +495,11 @@ describe("quota semantics", () => {
         },
       ],
     });
+    // A "known" report never names unresolvedWindowIds -- that field means
+    // "prevents a definitive conclusion" per README, and the MCP window
+    // doesn't. It's still disclosed on the raw report: result.windows.
+    expect(result.quotaSemantics?.unresolvedWindowIds).toBeUndefined();
+    expect(result.windows.map(({ id }) => id)).toContain("mcp_monthly");
   });
 
   it("still reports known Z.ai Coding Plan availability when the MCP window is absent", () => {

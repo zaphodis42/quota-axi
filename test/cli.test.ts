@@ -787,6 +787,9 @@ describe("CLI quota rendering", () => {
         state: expect.objectContaining({ status: "fresh", stale: false }),
       }),
     ]);
+    expect(
+      json.providers[0].quotaSemantics?.unresolvedWindowIds,
+    ).toBeUndefined();
     expect(json.providers[0].account).toBeUndefined();
     expect(json.providers[0].attempts).toBeUndefined();
     expect(JSON.stringify(json)).not.toMatch(
