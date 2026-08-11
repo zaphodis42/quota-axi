@@ -333,14 +333,12 @@ export async function runAgyCommand(options: {
   } catch (error) {
     commandError = error;
   }
-  let cleanupError: unknown;
   try {
     await rm(root, { recursive: true, force: true });
-  } catch (error) {
-    cleanupError = error;
+  } catch {
+    // ignore
   }
   if (commandError !== undefined) throw commandError;
-  if (cleanupError !== undefined) throw cleanupError;
   return commandResult!;
 }
 
@@ -351,7 +349,7 @@ export function normalizeAgyUsage(
   const command = objectValue(envelope?.command);
   if (envelope?.status !== "SUCCESS" || command?.name !== "usage")
     return undefined;
-  const data = objectValue(command)?.data;
+  const data = command?.data;
   const groups = objectValue(data)?.groups;
   if (!Array.isArray(groups)) return undefined;
   const windows: QuotaWindow[] = [];
