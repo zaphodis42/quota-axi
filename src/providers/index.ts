@@ -6,6 +6,7 @@ import { cursorAdapter } from "./cursor.js";
 import { grokAdapter } from "./grok.js";
 import { kimiAdapter } from "./kimi.js";
 import { zaiAdapter } from "./zai.js";
+import { zaiCodingPlanAdapter } from "./zai-coding-plan.js";
 import {
   PROVIDER_IDS,
   type ProviderAdapter,
@@ -21,6 +22,7 @@ export const PROVIDERS: Record<ProviderId, ProviderAdapter> = {
   kimi: kimiAdapter,
   zai: zaiAdapter,
   agy: agyAdapter,
+  "zai-coding-plan": zaiCodingPlanAdapter,
 };
 
 export function parseProviders(value: string | undefined): ProviderId[] {

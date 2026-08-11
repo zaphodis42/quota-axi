@@ -15,7 +15,7 @@ Quota CLI for agents - designed with [AXI](https://axi.md) (Agent eXperience Int
 Agents need quota state before they choose where work can safely run.
 Vendor dashboards are not shaped for shell automation, and local CLIs expose different windows, resets, and auth sources.
 
-quota-axi reports local Claude, Codex, Cursor, GitHub Copilot, Grok, Kimi, Z.AI, and Antigravity (`agy`) quota windows in one [AXI](https://axi.md)-shaped call.
+quota-axi reports local Claude, Codex, Cursor, GitHub Copilot, Grok, Kimi, Z.AI, Z.ai Coding Plan, and Antigravity (`agy`) quota windows in one [AXI](https://axi.md)-shaped call.
 It is data only: it never routes, recommends a provider, model, harness, credential, or route, proxies, intercepts, logs in, imports browser cookies, or mints or rotates a credential. When the same stored access token is expired, carries a refresh token, and is definitively rejected, quota-axi may delegate renewal to that vendor's own non-interactive CLI command and re-read the result ([Delegated credential refresh](#delegated-credential-refresh)). Default output has no ordering preference. The opt-in `models --sort runway` surface applies only its documented deterministic comparator to quota evidence, preserves all evidence and explicit ties, and is not a recommendation. It publishes one derived per-scope comparative selection signal, [`selection`](#per-scope-selection-signal), as data computed from figures it already reports; the consumer, not quota-axi, does any routing or ranking with it.
 
 - **Official sources** - quota-axi reads local provider auth sources and calls first-party quota, usage, billing, entitlement, local loopback, or read-only credential-liveness endpoints used by the local agents, with a read-only Codex app-server probe as fallback. The only other vendor commands it runs are the declared credential-refresh delegates.
@@ -299,7 +299,7 @@ It is generated from `src/skill.ts`; update it with `pnpm run build:skill` and v
 
 | Flag                                                       | Description                                                        |
 | ---------------------------------------------------------- | ------------------------------------------------------------------ |
-| `--provider claude,codex,cursor,copilot,grok,kimi,zai,agy` | Scope providers                                                    |
+| `--provider claude,codex,cursor,copilot,grok,kimi,zai,agy,zai-coding-plan` | Scope providers                                                    |
 | `--json`                                                   | Emit normalized JSON instead of TOON for quota, auth, or models    |
 | `--full`                                                   | Include audit and derivation details                               |
 | `--tui`                                                    | Render the live human terminal report instead of TOON (quota only) |
@@ -423,6 +423,8 @@ True Grok sign-out or definitive remote rejection uses `state.authStatus: unusab
 When Pi's `xai` API key (or a still-valid Grok CLI session) establishes model usability but consumer credit windows cannot be read, `state.authStatus` is `usable`, windows stay empty, and `state.error` is `Grok consumer quota unavailable` rather than sign-in required. Pi `xai` OAuth is tried against the same read-only grok.com consumer credits operation as the CLI session.
 
 Claude credential failures without a usable access token preserve the precise `credentials_missing` or `credentials_invalid` error. A usage response with HTTP 401/403 reports `Claude sign-in required`. These definitive failures return no windows and retire the Claude cache instead of masking current authentication state with stale quota.
+
+Z.ai Coding Plan's quota endpoint always answers HTTP 200, including for authentication failures, so `state.status: auth_required` is read from the response envelope's `code` field (`401`, `1000`, or `1001`), never from HTTP status or the locale-dependent `msg` string. An empty body, an undecodable or unparseable body, or a success envelope with no recognizable limits reports `state.status: fresh` with `windows: []` rather than an error or an invented percentage; a genuinely unexpected envelope shape (neither a known success nor a known auth-failure code) reports `state.status: error` and remains stale-cache eligible.
 
 ### Quota windows
 
@@ -594,7 +596,7 @@ Auth source entries can include `credentialPresent` when a non-secret probe conf
 | Name                 | Values                                                                                                                                                                                                      |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Auth source statuses | `available`, `missing`, `invalid`, `expired`, `skipped`, or `error`                                                                                                                                         |
-| Auth source names    | `oauth-file`, `keychain`, `auth-json`, `auth-env`, `apps-json`, `state-vscdb`, `cli-keychain`, `cli-authfile`, `cli-rpc`, `pi:kimi-coding`, `pi:xai`, `kimi-code-cli`, `opencode:auth.json`, and `loopback` |
+| Auth source names    | `oauth-file`, `keychain`, `auth-json`, `auth-env`, `apps-json`, `state-vscdb`, `cli-keychain`, `cli-authfile`, `cli-rpc`, `pi:kimi-coding`, `pi:xai`, `kimi-code-cli`, `pi:zai`, `zai-api-key-env`, `opencode:auth.json`, and `loopback` |
 
 ## Security Posture
 
@@ -609,6 +611,7 @@ Auth source entries can include `credentialPresent` when a non-secret probe conf
 | Grok           | Grok CLI session auth from `$GROK_AUTH_JSON`, inline `$GROK_AUTH`, `$GROK_AUTH_PATH`, or `$GROK_HOME/auth.json` / `~/.grok/auth.json`, plus Pi's independent `$PI_CODING_AGENT_DIR/auth.json` `xai` entry (default `~/.pi/agent/auth.json`) for OAuth or literal API-key model auth                                                                                                                                            |
 | Kimi           | Pi's `$PI_CODING_AGENT_DIR/auth.json` (default `~/.pi/agent/auth.json`) for a literal `kimi-coding` API key or unexpired OAuth access token first, then a fresh official Kimi Code CLI access token from `$KIMI_CODE_HOME/credentials/kimi-code.json` (default `$HOME/.kimi-code/credentials/kimi-code.json`)                                                                                                                  |
 | Z.AI           | opencode's `auth.json` (`$XDG_DATA_HOME/opencode/auth.json` when set, otherwise `~/.local/share/opencode/auth.json`) for a literal Coding Plan API key under `zai-coding-plan`, `zai`, `z-ai`, `z.ai`, `zhipu`, or `zhipuai`                                                                                                                                                                                                   |
+| Z.ai Coding Plan | Pi's `$PI_CODING_AGENT_DIR/auth.json` (default `~/.pi/agent/auth.json`) `zai` entry for a literal API key or unexpired OAuth access token first, then a literal `ZAI_API_KEY` environment variable                                                                                                                                   |
 | Antigravity    | No credential files; discovers already-running Antigravity or `agy` processes and reads only their 127.0.0.1 read-only loopback endpoints                                                                                                                                                                                                                                                                                      |
 
 ### Provider notes
@@ -676,6 +679,16 @@ Auth source entries can include `credentialPresent` when a non-secret probe conf
 - Definitive credential absence, an unparseable credential file, and HTTP 401/403 retire Z.AI cache data. An auth file that exists but cannot be read is an indeterminate local failure rather than a sign-out, so it reports `state.status: error` and stays cache-eligible. Timeout, network, 408, 429, 5xx, oversized-response, and unreadable-auth-file failures may reuse a formerly fresh snapshot with reset-expired windows removed and, for windows without a reset, five-hour, seven-day, or thirty-day age bounds by window kind; a resetless untrusted unknown window has no age bound of its own and is dropped.
 - It never launches opencode, refreshes or writes credentials, sends cookies, retains raw responses, or exposes the account's key or plan identity beyond the plan label the endpoint reports. The Coding Plan key does not expire, so there is nothing to renew and Z.AI has no delegated refresh.
 
+
+**Z.ai Coding Plan**
+
+- It opens Pi's `$PI_CODING_AGENT_DIR/auth.json` (default `~/.pi/agent/auth.json`) read-only with the same 64 KiB cap, descriptor cleanup, and `api_key`/unexpired-`oauth` contract as Kimi's `kimi-coding` entry; an expired OAuth record is reported as expired and never refreshed. If Pi has no supported `zai` credential, it reads a literal `ZAI_API_KEY` environment variable.
+- It sends one redirect-disabled `GET` to the fixed `https://api.z.ai/api/monitor/usage/quota/limit` endpoint with a `Bearer` authorization header, a 15 second total deadline, and a 262,144-byte decoded-body cap.
+- The endpoint always answers HTTP 200, including for authentication failures, so quota-axi branches on the response envelope's `code` field (`401`, `1000`, `1001` map to `auth_required`), never on HTTP status or the locale-dependent `msg` string.
+- An empty body, an undecodable or unparseable body, or a success envelope with no recognizable `limits` reports a fresh snapshot with `windows: []` instead of an error or a synthesized percentage; an envelope with neither a known success nor a known auth-failure code reports `state.status: error` and remains stale-cache eligible.
+- It never uses a Zhipu `{id}.{secret}` JWT, launches Pi, refreshes or writes credentials, imports cookies, or exposes account, plan-adjacent, or fingerprint data beyond `data.level`.
+- Definitive credential absence or rejection retires the cache. Transient fallback drops reset-expired windows and windows without a trusted `resetsAt` and no known fixed duration (the MCP window, or anything unrecognized) rather than aging them by an invented duration.
+
 **Antigravity**
 
 - It never launches, restarts, signs in to, or mutates Antigravity or `agy`. It reads no credential store, so it has no delegated refresh either.
@@ -695,7 +708,7 @@ Instead, when the same stored access token is expired, carries a refresh token, 
 | Claude                                          | `claude doctor` delegate          | the Claude Code Keychain item, or `.credentials.json` |
 | Codex                                           | existing `app-server` quota probe | `$CODEX_HOME/auth.json`                               |
 | Grok                                            | `grok models` delegate            | `$GROK_HOME/auth.json`                                |
-| Cursor, GitHub Copilot, Kimi, Z.AI, Antigravity | none                              | read-only; see the per-provider notes below           |
+| Cursor, GitHub Copilot, Kimi, Z.AI, Z.ai Coding Plan, Antigravity | none                              | read-only; see the per-provider notes below           |
 
 The Claude and Grok delegated runs are bounded the same way:
 

@@ -1,7 +1,7 @@
 // Trigger string Claude Code (and other agents) match against to auto-load the skill.
 // Kept terse and outcome-focused so it fires on "check quota/rate limits" intents.
 export const SKILL_DESCRIPTION =
-  "Report local Claude, Codex, Cursor, GitHub Copilot, Grok, Kimi, Z.AI, and Antigravity quota windows via the quota-axi CLI - remaining " +
+  "Report local Claude, Codex, Cursor, GitHub Copilot, Grok, Kimi, Z.AI, Z.ai Coding Plan, and Antigravity quota windows via the quota-axi CLI - remaining " +
   "effective usable runway, percentages, reset times, cycle-average pace vs the reset clock, a per-scope selection signal, and provider status read from local auth sources, " +
   "with no routing, no credential minting, and no default ordering preference. Use before deciding whether it is safe " +
   "to keep spending a provider's quota, when the user asks about usage, rate limits, pace, or " +
@@ -23,6 +23,7 @@ export const HERMES_TAGS = [
   "grok",
   "kimi",
   "zai",
+  "zai-coding-plan",
   "agy",
   "antigravity",
   "cli",

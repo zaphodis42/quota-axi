@@ -83,6 +83,7 @@ describe("quota semantics", () => {
       ["grok", [window("credits", "credits", 44)]],
       ["kimi", [window("weekly", "weekly", 59)]],
       ["zai", [window("weekly", "weekly", 42)]],
+      ["zai-coding-plan", [window("weekly", "weekly", 42)]],
       ["agy", [window("gemini_weekly", "weekly", 98)]],
       ["cursor", [window("included_usage", "monthly", 72)]],
       ["copilot", [window("premium_interactions", "monthly", 81)]],
@@ -464,6 +465,99 @@ describe("quota semantics", () => {
         },
       },
     ]);
+  });
+
+  it("computes all-model Z.ai Coding Plan headroom from the two token windows, keeping the MCP window a separate tools bound", () => {
+    const result = withQuotaSemantics(
+      provider("zai-coding-plan", [
+        window("five_hour", "session", 99),
+        window("weekly", "weekly", 80),
+        window("mcp_monthly", "monthly", 100),
+      ]),
+      GENERATED_AT,
+    );
+
+    expect(result.quotaSemantics).toMatchObject({
+      status: "known",
+      effectiveAvailability: [
+        {
+          scope: "all_models",
+          status: "known",
+          effectivePercentRemaining: 80,
+          boundedBy: ["five_hour", "weekly"],
+          limitingWindowIds: ["weekly"],
+        },
+        {
+          scope: "tools",
+          status: "known",
+          effectivePercentRemaining: 100,
+          boundedBy: ["mcp_monthly"],
+        },
+      ],
+    });
+  });
+
+  it("still reports known Z.ai Coding Plan availability when the MCP window is absent", () => {
+    const result = withQuotaSemantics(
+      provider("zai-coding-plan", [
+        window("five_hour", "session", 99),
+        window("weekly", "weekly", 80),
+      ]),
+      GENERATED_AT,
+    );
+
+    expect(result.quotaSemantics?.status).toBe("known");
+    expect(result.quotaSemantics?.unresolvedWindowIds).toBeUndefined();
+  });
+
+  it("degrades Z.ai Coding Plan availability to partial for an unrecognized unit/number window", () => {
+    const result = withQuotaSemantics(
+      provider("zai-coding-plan", [
+        window("five_hour", "session", 99),
+        window("weekly", "weekly", 80),
+        window("limit:3", "unknown", 50),
+      ]),
+      GENERATED_AT,
+    );
+
+    expect(result.quotaSemantics).toMatchObject({
+      status: "partial",
+      effectiveAvailability: [
+        {
+          scope: "all_models",
+          status: "unknown",
+          boundedBy: ["five_hour", "weekly"],
+        },
+      ],
+      unresolvedWindowIds: ["limit:3"],
+    });
+  });
+
+  it("degrades Z.ai Coding Plan availability to partial for untrusted (malformed) limit entries", () => {
+    const zai = provider("zai-coding-plan", [
+      window("five_hour", "session", 99),
+      window("weekly", "weekly", 80),
+    ]);
+    zai.state.untrustedWindowIds = ["limit:4"];
+
+    const result = withQuotaSemantics(zai, GENERATED_AT);
+
+    expect(result.quotaSemantics).toMatchObject({
+      status: "partial",
+      unresolvedWindowIds: ["limit:4"],
+    });
+  });
+
+  it("reports unknown Z.ai Coding Plan availability with no windows", () => {
+    const result = withQuotaSemantics(
+      provider("zai-coding-plan", []),
+      GENERATED_AT,
+    );
+
+    expect(result.quotaSemantics).toMatchObject({
+      status: "unknown",
+      effectiveAvailability: [],
+    });
   });
 
   it("applies Grok shared credits to product windows", () => {
