@@ -1,6 +1,6 @@
 ---
 name: quota-axi
-description: "Report local Claude, Codex, Cursor, GitHub Copilot, Grok, and Kimi quota windows via the quota-axi CLI - remaining effective usable runway, percentages, reset times, cycle-average pace vs the reset clock, and provider status read from local auth sources, with no routing, provider mutation, or default ordering preference. Use before deciding whether it is safe to keep spending a provider's quota, when the user asks about usage, rate limits, pace, or remaining quota, or when comparing local provider headroom."
+description: "Report local Claude, Codex, Cursor, GitHub Copilot, Grok, Kimi, and Z.ai Coding Plan quota windows via the quota-axi CLI - remaining effective usable runway, percentages, reset times, cycle-average pace vs the reset clock, and provider status read from local auth sources, with no routing, provider mutation, or default ordering preference. Use before deciding whether it is safe to keep spending a provider's quota, when the user asks about usage, rate limits, pace, or remaining quota, or when comparing local provider headroom."
 user-invocable: false
 author: Kun Chen (kunchenguid)
 metadata:
@@ -16,6 +16,7 @@ metadata:
         copilot,
         grok,
         kimi,
+        zai,
         cli,
       ]
     category: observability
@@ -43,7 +44,8 @@ or when comparing supported local provider headroom side by side.
 ## Workflow
 
 1. Run `npx -y quota-axi` for compact TOON output covering supported providers' quota windows.
-2. Scope to one provider with `--provider claude` or to a subset with `--provider cursor,copilot,grok,kimi`.
+2. Scope to one provider with `--provider claude` or to a subset with
+   `--provider cursor,copilot,grok,kimi,zai-coding-plan`.
 3. Pass `--json` for the normalized machine-readable model instead of TOON. Read
    `quotaSemantics.effectiveAvailability` rather than treating a model window in isolation:
    account windows can bound every model, and `boundedBy` names every window included in the
@@ -93,6 +95,14 @@ or when comparing supported local provider headroom side by side.
    Grok also reads that same Pi auth file for an independent `xai` OAuth or literal API-key
    entry and treats Grok as usable when either the Grok CLI session or Pi `xai` credential is
    valid.
+10. For Z.ai Coding Plan, quota-axi prefers a Pi-managed `zai` entry from
+    `$PI_CODING_AGENT_DIR/auth.json` (api_key or unexpired oauth access token, never refreshed),
+    then falls back to a literal `ZAI_API_KEY` environment variable. The plan's `five_hour` and
+    `weekly` windows jointly bound every model; the monthly MCP/web-tool window is reported
+    separately and never narrows model availability. The endpoint always answers HTTP 200, so an
+    auth failure is read from the response envelope, not the HTTP status; an empty, unparseable,
+    or limit-less success body reports a fresh snapshot with no windows rather than invented
+    percentages.
 
 ## Usage
 
@@ -103,11 +113,11 @@ commands[3]:
 output:
   Default TOON reports local quota evidence. models is a deterministic data join; --sort runway is explicit opt-in ordering. --tui renders a live human terminal report instead (q quits).
 flags[11]:
-  --provider <claude,codex,cursor,copilot,grok,kimi>, --json, --full, --tui, --refresh <30s-24h>, --once, --allow-keychain-prompt, --intelligence <high|medium|low>, --sort <runway>, --help, -v/--version
+  --provider <claude,codex,cursor,copilot,grok,kimi,zai-coding-plan>, --json, --full, --tui, --refresh <30s-24h>, --once, --allow-keychain-prompt, --intelligence <high|medium|low>, --sort <runway>, --help, -v/--version
 examples:
   quota-axi
   quota-axi --provider claude
-  quota-axi --provider cursor,copilot,grok,kimi
+  quota-axi --provider cursor,copilot,grok,kimi,zai-coding-plan
   quota-axi --json
   quota-axi --full
   quota-axi --tui

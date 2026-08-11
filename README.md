@@ -15,7 +15,7 @@ Quota CLI for agents - designed with [AXI](https://axi.md) (Agent eXperience Int
 Agents need quota state before they choose where work can safely run.
 Vendor dashboards are not shaped for shell automation, and local CLIs expose different windows, resets, and auth sources.
 
-quota-axi reports local Claude, Codex, Cursor, GitHub Copilot, Grok, and Kimi quota windows in one [AXI](https://axi.md)-shaped call.
+quota-axi reports local Claude, Codex, Cursor, GitHub Copilot, Grok, Kimi, and Z.ai Coding Plan quota windows in one [AXI](https://axi.md)-shaped call.
 It is data only: it never routes, recommends a provider, model, harness, credential, or route, proxies, intercepts, logs in, imports browser cookies, or mutates provider state. Default output has no ordering preference. The opt-in `models --sort runway` surface applies only its documented deterministic comparator to quota evidence, preserves all evidence and explicit ties, and is not a recommendation.
 
 - **Official sources** - quota-axi reads local provider auth sources and calls the first-party quota, usage, billing, or entitlement endpoints used by the local agents, with a read-only Codex app-server probe as fallback.
@@ -319,19 +319,19 @@ It is generated from `src/skill.ts`; update it with `pnpm run build:skill` and v
 
 ### Flags
 
-| Flag                                               | Description                                                        |
-| -------------------------------------------------- | ------------------------------------------------------------------ |
-| `--provider claude,codex,cursor,copilot,grok,kimi` | Scope providers                                                    |
-| `--json`                                           | Emit normalized JSON instead of TOON for quota, auth, or models    |
-| `--full`                                           | Include account, source attempts, and reserve details              |
-| `--tui`                                            | Render the live human terminal report instead of TOON (quota only) |
-| `--refresh 30s\|5m\|1h`                            | Live `--tui` refresh interval, default 5m (30s-24h)                |
-| `--once`                                           | Render one `--tui` frame and exit instead of staying live          |
-| `--allow-keychain-prompt`                          | Permit macOS Claude Keychain access that could prompt              |
-| `--intelligence high\|medium\|low`                 | Filter `models` by editorial intelligence bucket                   |
-| `--sort runway`                                    | Explicitly sort `models` by documented usable-runway evidence      |
-| `-h`, `--help`                                     | Print terse [AXI](https://axi.md) help                             |
-| `-v`, `-V`, `--version`                            | Print version                                                      |
+| Flag                                                               | Description                                                        |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `--provider claude,codex,cursor,copilot,grok,kimi,zai-coding-plan` | Scope providers                                                    |
+| `--json`                                                           | Emit normalized JSON instead of TOON for quota, auth, or models    |
+| `--full`                                                           | Include account, source attempts, and reserve details              |
+| `--tui`                                                            | Render the live human terminal report instead of TOON (quota only) |
+| `--refresh 30s\|5m\|1h`                                            | Live `--tui` refresh interval, default 5m (30s-24h)                |
+| `--once`                                                           | Render one `--tui` frame and exit instead of staying live          |
+| `--allow-keychain-prompt`                                          | Permit macOS Claude Keychain access that could prompt              |
+| `--intelligence high\|medium\|low`                                 | Filter `models` by editorial intelligence bucket                   |
+| `--sort runway`                                                    | Explicitly sort `models` by documented usable-runway evidence      |
+| `-h`, `--help`                                                     | Print terse [AXI](https://axi.md) help                             |
+| `-v`, `-V`, `--version`                                            | Print version                                                      |
 
 ### Human terminal report (`--tui`)
 
@@ -390,6 +390,8 @@ True Grok sign-out or definitive remote rejection uses `state.authStatus: unusab
 When Pi's `xai` credential (or a still-valid Grok CLI session) establishes model usability but consumer credit windows cannot be read, `state.authStatus` is `usable`, windows stay empty, and `state.error` is `Grok consumer quota unavailable` rather than sign-in required.
 
 Claude credential failures without a usable access token preserve the precise `credentials_missing` or `credentials_invalid` error. A usage response with HTTP 401/403 reports `Claude sign-in required`. These definitive failures return no windows and retire the Claude cache instead of masking current authentication state with stale quota.
+
+Z.ai Coding Plan's quota endpoint always answers HTTP 200, including for authentication failures, so `state.status: auth_required` is read from the response envelope's `code` field (`401`, `1000`, or `1001`), never from HTTP status or the locale-dependent `msg` string. An empty body, an undecodable or unparseable body, or a success envelope with no recognizable limits reports `state.status: fresh` with `windows: []` rather than an error or an invented percentage; a genuinely unexpected envelope shape (neither a known success nor a known auth-failure code) reports `state.status: error` and remains stale-cache eligible.
 
 ### Quota windows
 
@@ -489,6 +491,7 @@ Source attempts can include `credentialPresent` when a non-secret probe confirms
 | Grok                   | With a usable Grok CLI session bearer, can report the shared `credits` window, optional product-scoped `product:<slug>` windows, the current-period `startsAt` and reset, and optional prepaid credit balance from the consumer Usage-page operation. Pi `xai` auth alone establishes usability but cannot provide these consumer windows. Top-level `credits.remaining` is prepaid/on-demand balance, distinct from the shared period `windows` credits percentage used for effective availability. Pace prefers the startsAt/resetsAt pair.                          |
 | Grok proto3 zero       | For the exact consumer operation only, an omitted usage float is the official proto3 zero when a valid weekly or monthly current period proves the config is present; quota-axi reports `0` used and `100` remaining rather than deriving usage from money.                                                                                                                                                                                                                                                                                                            |
 | Kimi                   | Reports the principal `weekly` subscription window (with trusted 604,800s duration) plus every valid self-described limit in wire order. Only a limit whose normalized duration is exactly 18,000 seconds is identified as `five_hour`; future limits remain `limit:<index>` unknown windows.                                                                                                                                                                                                                                                                          |
+| Z.ai Coding Plan       | Reports `five_hour` (18,000s) and `weekly` (604,800s) `TOKENS_LIMIT` account windows plus a monthly `mcp_monthly` `TIME_LIMIT` window (web-search/reader/zread tool quota, no `windowSeconds` since a calendar month has no fixed duration). Only the three verified `(type, unit, number)` triples are recognized; any other combination is a `limit:<index>` unknown window rather than a guessed duration. `data.level` maps to `plan`; there is no account identity in the payload.                                                                                |
 
 ### Model catalog and `models`
 
@@ -510,23 +513,24 @@ Default model order is deterministic and non-preferential: provider, then model 
 
 Auth source entries can include `credentialPresent` when a non-secret probe confirms a credential item exists.
 
-| Name                 | Values                                                                                                                                    |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Auth source statuses | `available`, `missing`, `invalid`, `expired`, `skipped`, or `error`                                                                       |
-| Auth source names    | `oauth-file`, `keychain`, `auth-json`, `auth-env`, `apps-json`, `state-vscdb`, `cli-rpc`, `pi:kimi-coding`, `pi:xai`, and `kimi-code-cli` |
+| Name                 | Values                                                                                                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth source statuses | `available`, `missing`, `invalid`, `expired`, `skipped`, or `error`                                                                                                    |
+| Auth source names    | `oauth-file`, `keychain`, `auth-json`, `auth-env`, `apps-json`, `state-vscdb`, `cli-rpc`, `pi:kimi-coding`, `pi:xai`, `kimi-code-cli`, `pi:zai`, and `zai-api-key-env` |
 
 ## Security Posture
 
 ### Provider credential sources
 
-| Provider       | Credential sources read                                                                                                                                                                                                                                                                                                              |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Claude         | `$CLAUDE_CONFIG_DIR/.credentials.json` or `~/.claude/.credentials.json`; on macOS, the corresponding default or path-hashed Claude Code Keychain value pinned to Claude Code's validated current-user account, with `--allow-keychain-prompt` or, after a profile-and-account-scoped non-secret access marker exists, on plain calls |
-| Codex          | `$CODEX_HOME/auth.json` or `~/.codex/auth.json` before the read-only CLI fallback; `$QUOTA_AXI_CODEX_BINARY` can pin that fallback to an absolute executable path                                                                                                                                                                    |
-| Cursor         | `$CURSOR_STATE_DB` when set or the platform Cursor state database path                                                                                                                                                                                                                                                               |
-| GitHub Copilot | `$GITHUB_COPILOT_APPS_JSON` when set or the local Copilot apps auth file                                                                                                                                                                                                                                                             |
-| Grok           | Grok CLI session auth from `$GROK_AUTH_JSON`, inline `$GROK_AUTH`, `$GROK_AUTH_PATH`, or `$GROK_HOME/auth.json` / `~/.grok/auth.json`, plus Pi's independent `$PI_CODING_AGENT_DIR/auth.json` `xai` entry (default `~/.pi/agent/auth.json`) for OAuth or literal API-key model auth                                                  |
-| Kimi           | Pi's `$PI_CODING_AGENT_DIR/auth.json` (default `~/.pi/agent/auth.json`) for a literal `kimi-coding` API key or unexpired OAuth access token first, then a fresh official Kimi Code CLI access token from `$KIMI_CODE_HOME/credentials/kimi-code.json` (default `$HOME/.kimi-code/credentials/kimi-code.json`)                        |
+| Provider         | Credential sources read                                                                                                                                                                                                                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Claude           | `$CLAUDE_CONFIG_DIR/.credentials.json` or `~/.claude/.credentials.json`; on macOS, the corresponding default or path-hashed Claude Code Keychain value pinned to Claude Code's validated current-user account, with `--allow-keychain-prompt` or, after a profile-and-account-scoped non-secret access marker exists, on plain calls |
+| Codex            | `$CODEX_HOME/auth.json` or `~/.codex/auth.json` before the read-only CLI fallback; `$QUOTA_AXI_CODEX_BINARY` can pin that fallback to an absolute executable path                                                                                                                                                                    |
+| Cursor           | `$CURSOR_STATE_DB` when set or the platform Cursor state database path                                                                                                                                                                                                                                                               |
+| GitHub Copilot   | `$GITHUB_COPILOT_APPS_JSON` when set or the local Copilot apps auth file                                                                                                                                                                                                                                                             |
+| Grok             | Grok CLI session auth from `$GROK_AUTH_JSON`, inline `$GROK_AUTH`, `$GROK_AUTH_PATH`, or `$GROK_HOME/auth.json` / `~/.grok/auth.json`, plus Pi's independent `$PI_CODING_AGENT_DIR/auth.json` `xai` entry (default `~/.pi/agent/auth.json`) for OAuth or literal API-key model auth                                                  |
+| Kimi             | Pi's `$PI_CODING_AGENT_DIR/auth.json` (default `~/.pi/agent/auth.json`) for a literal `kimi-coding` API key or unexpired OAuth access token first, then a fresh official Kimi Code CLI access token from `$KIMI_CODE_HOME/credentials/kimi-code.json` (default `$HOME/.kimi-code/credentials/kimi-code.json`)                        |
+| Z.ai Coding Plan | Pi's `$PI_CODING_AGENT_DIR/auth.json` (default `~/.pi/agent/auth.json`) `zai` entry for a literal API key or unexpired OAuth access token first, then a literal `ZAI_API_KEY` environment variable                                                                                                                                   |
 
 ### Provider notes
 
@@ -576,6 +580,15 @@ Auth source entries can include `credentialPresent` when a non-secret probe conf
 - It sends one redirect-disabled `GET` to the fixed `https://api.kimi.com/coding/v1/usages` endpoint with a 15 second total deadline and a 262,144-byte decoded-body cap.
 - It never uses `refresh_token`, accepts a custom Kimi origin, launches Pi or Kimi, makes a model request, refreshes or writes credentials, creates a device ID, imports cookies, sends device identity, retains raw responses, or exposes account, plan, token, or fingerprint data.
 - Definitive credential absence or rejection retires Kimi cache data. Transient fallback drops reset-expired windows and applies five-hour or seven-day age bounds to windows without resets.
+
+**Z.ai Coding Plan**
+
+- It opens Pi's `$PI_CODING_AGENT_DIR/auth.json` (default `~/.pi/agent/auth.json`) read-only with the same 64 KiB cap, descriptor cleanup, and `api_key`/unexpired-`oauth` contract as Kimi's `zai` entry; an expired OAuth record is reported as expired and never refreshed. If Pi has no supported `zai` credential, it reads a literal `ZAI_API_KEY` environment variable.
+- It sends one redirect-disabled `GET` to the fixed `https://api.z.ai/api/monitor/usage/quota/limit` endpoint with a `Bearer` authorization header, a 15 second total deadline, and a 262,144-byte decoded-body cap.
+- The endpoint always answers HTTP 200, including for authentication failures, so quota-axi branches on the response envelope's `code` field (`401`, `1000`, `1001` map to `auth_required`), never on HTTP status or the locale-dependent `msg` string.
+- An empty body, an undecodable or unparseable body, or a success envelope with no recognizable `limits` reports a fresh snapshot with `windows: []` instead of an error or a synthesized percentage; an envelope with neither a known success nor a known auth-failure code reports `state.status: error` and remains stale-cache eligible.
+- It never uses a Zhipu `{id}.{secret}` JWT, launches Pi, refreshes or writes credentials, imports cookies, or exposes account, plan-adjacent, or fingerprint data beyond `data.level`.
+- Definitive credential absence or rejection retires the cache. Transient fallback drops reset-expired windows and windows without a trusted `resetsAt` and no known fixed duration (the MCP window, or anything unrecognized) rather than aging them by an invented duration.
 
 ### Safety guarantees
 

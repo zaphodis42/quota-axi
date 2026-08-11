@@ -88,6 +88,12 @@ function semanticsFor(
         provider.state.untrustedWindowIds ?? [],
         generatedAt,
       );
+    case "zai-coding-plan":
+      return zaiCodingPlanSemantics(
+        provider.windows,
+        provider.state.untrustedWindowIds ?? [],
+        generatedAt,
+      );
     case "cursor":
     case "copilot":
       return unknownSemantics(
@@ -265,6 +271,67 @@ function kimiSemantics(
     effectiveAvailability,
     "Kimi's weekly and five-hour account windows jointly bound every model, so effective remaining is the minimum across the named windows.",
   );
+}
+
+function zaiCodingPlanSemantics(
+  windows: QuotaWindow[],
+  untrustedWindowIds: string[],
+  generatedAt: string,
+): QuotaSemantics {
+  const bounding = windows.filter(
+    ({ id }) => id === "five_hour" || id === "weekly",
+  );
+  const mcp = windows.filter(({ id }) => id === "mcp_monthly");
+  const unfamiliar = windows.filter(
+    ({ id }) => id !== "five_hour" && id !== "weekly" && id !== "mcp_monthly",
+  );
+  const unresolvedWindowIds = [
+    ...new Set([
+      ...mcp.map(({ id }) => id),
+      ...unfamiliar.map(({ id }) => id),
+      ...untrustedWindowIds,
+    ]),
+  ];
+
+  if (unfamiliar.length > 0 || untrustedWindowIds.length > 0) {
+    return {
+      status: "partial",
+      description:
+        "Z.ai Coding Plan's five-hour and weekly account windows are known bounds and the MCP window is a separate tool quota, but unrecognized or unparsed limits may add bounds, so effective remaining is unknown.",
+      effectiveAvailability:
+        bounding.length > 0
+          ? [
+              {
+                scope: "all_models",
+                status: "unknown",
+                boundedBy: bounding.map(({ id }) => id),
+                pace: summarizeEffectivePace(bounding),
+                runway: {
+                  status: "unknown",
+                  unmeasurableWindowIds: [
+                    ...bounding.map(({ id }) => id),
+                    ...unresolvedWindowIds,
+                  ],
+                },
+              },
+            ]
+          : [],
+      unresolvedWindowIds,
+    };
+  }
+
+  const effectiveAvailability =
+    bounding.length > 0
+      ? [availability("all_models", bounding, generatedAt)]
+      : [];
+  return {
+    status: effectiveAvailability.length > 0 ? "known" : "unknown",
+    description:
+      effectiveAvailability.length > 0
+        ? "Z.ai Coding Plan's five-hour and weekly account windows jointly bound every model, so effective remaining is the minimum across the named windows. The MCP/web-tool monthly window caps a separate workload and does not bound model availability."
+        : "No quota windows are available, so no effective remaining percentage can be computed.",
+    effectiveAvailability,
+  };
 }
 
 function availability(

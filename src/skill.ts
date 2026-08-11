@@ -3,7 +3,7 @@ import { DESCRIPTION, TOP_HELP } from "./cli.js";
 // Trigger string Claude Code (and other agents) match against to auto-load the skill.
 // Kept terse and outcome-focused so it fires on "check quota/rate limits" intents.
 export const SKILL_DESCRIPTION =
-  "Report local Claude, Codex, Cursor, GitHub Copilot, Grok, and Kimi quota windows via the quota-axi CLI - remaining " +
+  "Report local Claude, Codex, Cursor, GitHub Copilot, Grok, Kimi, and Z.ai Coding Plan quota windows via the quota-axi CLI - remaining " +
   "effective usable runway, percentages, reset times, cycle-average pace vs the reset clock, and provider status read from local auth sources, " +
   "with no routing, provider mutation, or default ordering preference. Use before deciding whether it is safe " +
   "to keep spending a provider's quota, when the user asks about usage, rate limits, pace, or " +
@@ -24,6 +24,7 @@ export const HERMES_TAGS = [
   "copilot",
   "grok",
   "kimi",
+  "zai",
   "cli",
 ];
 export const HERMES_CATEGORY = "observability";
@@ -74,7 +75,8 @@ or when comparing supported local provider headroom side by side.
 ## Workflow
 
 1. Run \`npx -y quota-axi\` for compact TOON output covering supported providers' quota windows.
-2. Scope to one provider with \`--provider claude\` or to a subset with \`--provider cursor,copilot,grok,kimi\`.
+2. Scope to one provider with \`--provider claude\` or to a subset with
+   \`--provider cursor,copilot,grok,kimi,zai-coding-plan\`.
 3. Pass \`--json\` for the normalized machine-readable model instead of TOON. Read
    \`quotaSemantics.effectiveAvailability\` rather than treating a model window in isolation:
    account windows can bound every model, and \`boundedBy\` names every window included in the
@@ -124,6 +126,14 @@ or when comparing supported local provider headroom side by side.
    Grok also reads that same Pi auth file for an independent \`xai\` OAuth or literal API-key
    entry and treats Grok as usable when either the Grok CLI session or Pi \`xai\` credential is
    valid.
+10. For Z.ai Coding Plan, quota-axi prefers a Pi-managed \`zai\` entry from
+    \`$PI_CODING_AGENT_DIR/auth.json\` (api_key or unexpired oauth access token, never refreshed),
+    then falls back to a literal \`ZAI_API_KEY\` environment variable. The plan's \`five_hour\` and
+    \`weekly\` windows jointly bound every model; the monthly MCP/web-tool window is reported
+    separately and never narrows model availability. The endpoint always answers HTTP 200, so an
+    auth failure is read from the response envelope, not the HTTP status; an empty, unparseable,
+    or limit-less success body reports a fresh snapshot with no windows rather than invented
+    percentages.
 
 ## Usage
 
