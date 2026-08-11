@@ -331,7 +331,6 @@ function zaiCodingPlanSemantics(
         ? "Z.ai Coding Plan's five-hour and weekly account windows jointly bound every model, so effective remaining is the minimum across the named windows. The MCP/web-tool monthly window caps a separate workload and does not bound model availability."
         : "No quota windows are available, so no effective remaining percentage can be computed.",
     effectiveAvailability,
-    ...(mcp.length > 0 ? { unresolvedWindowIds: mcp.map(({ id }) => id) } : {}),
   };
 }
 

@@ -297,12 +297,6 @@ describe("Z.ai Coding Plan envelope auth codes", () => {
 
 describe("Z.ai Coding Plan fail-soft empty windows", () => {
   it.each([
-    ["an empty body", () => new Response(null, { status: 200 })],
-    ["an unparseable body", () => new Response("{not-json", { status: 200 })],
-    [
-      "a non-object top-level JSON value",
-      () => new Response("42", { status: 200 }),
-    ],
     [
       "a success envelope with no data",
       () => jsonResponse({ code: 200, msg: "ok", success: true }),
@@ -352,6 +346,58 @@ describe("Z.ai Coding Plan fail-soft empty windows", () => {
       });
     },
   );
+});
+
+describe("Z.ai Coding Plan undecodable responses", () => {
+  it.each([
+    [
+      "an empty body",
+      () => new Response(null, { status: 200 }),
+      "zai_empty_response",
+    ],
+    [
+      "an unparseable body",
+      () => new Response("{not-json", { status: 200 }),
+      "zai_malformed_json",
+    ],
+    [
+      "a non-object top-level JSON value",
+      () => new Response("42", { status: 200 }),
+      "zai_unrecognized_envelope",
+    ],
+    [
+      "invalid UTF-8 bytes",
+      () => new Response(new Uint8Array([0xff, 0xfe, 0xfd]), { status: 200 }),
+      "zai_response_invalid_utf8",
+    ],
+  ])(
+    "treats %s as a stale-eligible failure, not a fresh empty-window snapshot",
+    async (_label, respond, expectedError) => {
+      const deleteCachedProvider = vi.fn();
+      const report = await testAdapter({
+        fetch: vi.fn(async () => respond()),
+        readCachedProvider: () => undefined,
+        deleteCachedProvider,
+      }).fetchQuota(OPTIONS);
+
+      expect(report.state.status).toBe("error");
+      expect(report.state.error).toBe(expectedError);
+      expect(deleteCachedProvider).not.toHaveBeenCalled();
+    },
+  );
+
+  it("falls back to a stale cached snapshot instead of retiring it on an undecodable body", async () => {
+    const cached = cachedQuota();
+    const report = await testAdapter({
+      fetch: vi.fn(async () => new Response(null, { status: 200 })),
+      readCachedProvider: () => cached,
+    }).fetchQuota(OPTIONS);
+
+    expect(report.source).toBe("cache");
+    expect(report.state.stale).toBe(true);
+    expect(report.state.error).toBe("zai_empty_response");
+    expect(report.windows).not.toEqual([]);
+  });
 });
 
 describe("Z.ai Coding Plan unexpected envelope shape", () => {

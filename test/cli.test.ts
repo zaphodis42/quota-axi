@@ -671,7 +671,6 @@ describe("CLI quota rendering", () => {
         ],
         quotaSemantics: expect.objectContaining({
           status: "known",
-          unresolvedWindowIds: ["mcp_monthly"],
           effectiveAvailability: [
             expect.objectContaining({
               scope: "all_models",
@@ -682,6 +681,9 @@ describe("CLI quota rendering", () => {
         state: expect.objectContaining({ status: "fresh", stale: false }),
       }),
     ]);
+    expect(
+      json.providers[0].quotaSemantics?.unresolvedWindowIds,
+    ).toBeUndefined();
     expect(json.providers[0].account).toBeUndefined();
     expect(json.providers[0].attempts).toBeUndefined();
     expect(JSON.stringify(json)).not.toMatch(
