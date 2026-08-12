@@ -7,7 +7,7 @@ export const SKILL_DESCRIPTION =
   "to keep spending a provider's quota, when the user asks about usage, rate limits, pace, or " +
   "remaining quota, or when comparing local provider headroom.";
 
-export const SKILL_AUTHOR = "Kun Chen (kunchenguid)";
+export const SKILL_AUTHOR = "zaphodis42";
 
 // Extended frontmatter read by Nous Research's Hermes Agent harness
 // (https://hermes-agent.nousresearch.com/docs/user-guide/features/skills).
@@ -72,8 +72,8 @@ local provider headroom.
 
 For current instructions, output shape, and field semantics, run the CLI (no global install required):
 
-- \`npx -y quota-axi\` - default TOON report
-- \`npx -y quota-axi --help\` - commands and flags
-- \`npx -y quota-axi --json\` / \`npx -y quota-axi --full\` - current output shape and field semantics
+- \`npx -y @zaphodis42/quota-axi\` - default TOON report
+- \`npx -y @zaphodis42/quota-axi --help\` - commands and flags
+- \`npx -y @zaphodis42/quota-axi --json\` / \`npx -y @zaphodis42/quota-axi --full\` - current output shape and field semantics
 `;
 }

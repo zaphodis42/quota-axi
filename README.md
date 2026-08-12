@@ -3,10 +3,9 @@
 <h3 align="center">Your agent needs to be aware of your quota</h3>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/quota-axi"><img alt="npm" src="https://img.shields.io/npm/v/quota-axi?style=flat-square" /></a>
-  <a href="https://github.com/kunchenguid/quota-axi/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/kunchenguid/quota-axi/ci.yml?style=flat-square&label=ci" /></a>
+  <a href="https://www.npmjs.com/package/@zaphodis42/quota-axi"><img alt="npm" src="https://img.shields.io/npm/v/@zaphodis42/quota-axi?style=flat-square" /></a>
+  <a href="https://github.com/zaphodis42/quota-axi/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/zaphodis42/quota-axi/ci.yml?style=flat-square&label=ci" /></a>
   <a href="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=flat-square"><img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=flat-square" /></a>
-  <a href="https://x.com/kunchenguid"><img alt="X" src="https://img.shields.io/badge/X-@kunchenguid-black?style=flat-square" /></a>
   <a href="https://discord.gg/Wsy2NpnZDu"><img alt="Discord" src="https://img.shields.io/discord/1439901831038763092?style=flat-square&label=discord" /></a>
 </p>
 
@@ -31,7 +30,7 @@ Run `quota-axi --allow-keychain-prompt` once and approve Keychain access with "A
 After a successful read, future non-interactive quota calls reuse the corresponding account-scoped grant without requiring the flag. Claude grants are also profile-scoped; legacy Claude markers created before account-pinned lookup are not reused.
 
 ```sh
-$ npx -y quota-axi
+$ npx -y @zaphodis42/quota-axi
 bin: ~/.npm/_npx/.../quota-axi
 description: Report local agent-provider quota windows for routing-aware agents
 generatedAt: "2026-03-15T16:42:00.000Z"
@@ -219,28 +218,28 @@ quota-axi requires Node.js 22.19 or newer.
 Install the skill in the [Agent Skills](https://agentskills.io) format with [`npx skills`](https://github.com/vercel-labs/skills):
 
 ```sh
-npx skills add kunchenguid/quota-axi --skill quota-axi -g
+npx skills add zaphodis42/quota-axi --skill quota-axi -g
 ```
 
-The minimal skill points your agent to quota-axi's live CLI guidance through `npx -y quota-axi`, so nothing needs to be installed ahead of time and installed skill copies do not duplicate changing CLI instructions.
+The minimal skill points your agent to quota-axi's live CLI guidance through `npx -y @zaphodis42/quota-axi`, so nothing needs to be installed ahead of time and installed skill copies do not duplicate changing CLI instructions.
 `-g` installs the skill for all projects (e.g. `~/.claude/skills/`); drop it to install for the current project only (`.claude/skills/`).
 
 **Direct use**
 
 ```sh
-npx -y quota-axi
+npx -y @zaphodis42/quota-axi
 ```
 
 **npm**
 
 ```sh
-npm install -g quota-axi
+npm install -g @zaphodis42/quota-axi
 ```
 
 **From source**
 
 ```sh
-git clone https://github.com/kunchenguid/quota-axi.git
+git clone https://github.com/zaphodis42/quota-axi.git
 cd quota-axi
 pnpm install
 pnpm run build
@@ -335,7 +334,7 @@ The `quota` command's `--json` emits `schemaVersion: 5`.
 
 ### Normalized schema contract
 
-The package publishes TypeScript declarations from its package root, so consumers can use `import type { QuotaAxiResponse, ModelsResponse } from "quota-axi"`. The adapter contract is `ProviderAdapter` in and normalized `ProviderQuota` out: adapters report observed quota data, never rank, mint credentials, or retain raw responses. The narrowly bounded vendor-owned renewal path is documented under [Delegated credential refresh](#delegated-credential-refresh).
+The package publishes TypeScript declarations from its package root, so consumers can use `import type { QuotaAxiResponse, ModelsResponse } from "@zaphodis42/quota-axi"`. The adapter contract is `ProviderAdapter` in and normalized `ProviderQuota` out: adapters report observed quota data, never rank, mint credentials, or retain raw responses. The narrowly bounded vendor-owned renewal path is documented under [Delegated credential refresh](#delegated-credential-refresh).
 
 `schemaVersion` is command-specific. Additive optional fields do not bump it. A semantic or incompatible shape change does. The `quota` report is version 5, `auth` is version 1, and `models` is version 1.
 

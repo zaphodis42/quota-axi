@@ -24,7 +24,7 @@ Two exemptions exist, and both are author exemptions on the gate job in [`.githu
 
 ## Workflow
 
-1. Fork the repo, then clone the parent repo or set your local `origin` back to the parent repo (`git@github.com:kunchenguid/quota-axi.git`).
+1. Fork the repo, then clone the parent repo or set your local `origin` back to the parent repo (`git@github.com:zaphodis42/quota-axi.git`).
 2. Create a branch and make your changes.
 3. Initialize or refresh the gate with your fork as the push target: `no-mistakes init --fork-url git@github.com:<you>/quota-axi.git`.
 4. Commit your changes.
@@ -52,7 +52,7 @@ See the [no-mistakes quick start](https://kunchenguid.github.io/no-mistakes/star
 - Do not bump `package.json`'s `version` by hand for ordinary changes.
   release-please updates it in the release PR.
 - Do not change `release-please-config.json`'s `bootstrap-sha` for ordinary changes.
-  It points at commit `9f5dc949c50ab8ac0a441be777e1c3693ee0b612`, the published npm `0.1.0` baseline.
+  It points at commit `898189cba57912f651b5375bb141ee22543945a3`, the baseline for this fork's `@zaphodis42/quota-axi` release automation.
 - Do not hand-edit `skills/quota-axi/SKILL.md`.
   It is generated from `src/skill.ts`, including frontmatter metadata; run `pnpm run build:skill` and commit the result.
 - Keep changes within the product and credential boundaries defined in [VISION.md](VISION.md); the user-facing safety contract lives in [README.md](README.md#safety-guarantees).
