@@ -9,7 +9,7 @@ export const SKILL_DESCRIPTION =
   "to keep spending a provider's quota, when the user asks about usage, rate limits, pace, or " +
   "remaining quota, or when comparing local provider headroom.";
 
-export const SKILL_AUTHOR = "Kun Chen (kunchenguid)";
+export const SKILL_AUTHOR = "zaphodis42";
 
 // Extended frontmatter read by Nous Research's Hermes Agent harness
 // (https://hermes-agent.nousresearch.com/docs/user-guide/features/skills).
@@ -37,7 +37,7 @@ function yamlDoubleQuote(value: string): string {
 /**
  * Render the installable SKILL.md for the quota-axi skill. The body uses the
  * same shared CLI description and help text, then adds agent-facing workflow
- * guidance that prefers non-interactive `npx -y quota-axi ...` invocation so
+ * guidance that prefers non-interactive `npx -y @zaphodis42/quota-axi ...` invocation so
  * the CLI comes along on demand.
  *
  * @returns full SKILL.md contents including YAML frontmatter
@@ -58,7 +58,7 @@ metadata:
 
 ${DESCRIPTION}
 
-You do not need quota-axi installed globally - invoke it with \`npx -y quota-axi\`.
+You do not need quota-axi installed globally - invoke it with \`npx -y @zaphodis42/quota-axi\`.
 
 quota-axi is data only: it never routes, recommends a provider, model, harness, credential, or
 route, proxies, intercepts, logs in, imports browser cookies, or mutates provider state. Default
@@ -79,7 +79,7 @@ or when comparing supported local provider headroom side by side.
 
 ## Workflow
 
-1. Run \`npx -y quota-axi\` for compact TOON output covering supported providers' quota windows.
+1. Run \`npx -y @zaphodis42/quota-axi\` for compact TOON output covering supported providers' quota windows.
 2. Scope to one provider with \`--provider claude\` or to a subset with
    \`--provider cursor,copilot,grok,kimi,zai-coding-plan\`. Use \`--provider antigravity\` only when
    an explicit Antigravity print-mode probe is wanted; it is not part of the bare/default provider
@@ -97,13 +97,13 @@ or when comparing supported local provider headroom side by side.
    one. Stale reports keep raw windows for diagnostics, but effective availability, pace, and
    runway are always unknown; never route from a stale raw percentage as though it were current
    headroom. Default output has no ordering preference. For a provider-native model evidence join,
-   use \`npx -y quota-axi models --intelligence high --json\`. This catalog covers Claude, Codex,
+   use \`npx -y @zaphodis42/quota-axi models --intelligence high --json\`. This catalog covers Claude, Codex,
    Grok, and Kimi only; its buckets are coarse editorial classifications, not scores. Its response
    includes catalog provenance and unmatched model windows. \`--sort runway\` is an explicit,
    documented quota-evidence comparator, not a provider, model, harness, credential, or route
    recommendation; inspect \`sort.tieGroups\` rather than treating equal evidence as a preference.
 4. Pass \`--full\` to include account identity, per-source attempts, and raw reserve diagnostics.
-5. Run \`npx -y quota-axi auth\` to check local auth-source availability without printing
+5. Run \`npx -y @zaphodis42/quota-axi auth\` to check local auth-source availability without printing
    secret values.
 6. On macOS, Claude Keychain value reads are pinned to the same validated current-user account
    Claude Code selects and are skipped by default until the user grants access once.

@@ -3,7 +3,7 @@ import {
   type ModelQuotaRecord,
   type ModelsResponse,
   type QuotaAxiResponse,
-} from "quota-axi";
+} from "@zaphodis42/quota-axi";
 
 const quota: QuotaAxiResponse = {
   generatedAt: "2026-08-05T12:00:00.000Z",
