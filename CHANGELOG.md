@@ -1,101 +1,11 @@
 # Changelog
 
-## [0.1.33](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.32...quota-axi-v0.1.33) (2026-08-28)
+## [0.1.1](https://github.com/zaphodis42/quota-axi/compare/quota-axi-v0.1.0...quota-axi-v0.1.1) (2026-08-12)
 
 
 ### Bug Fixes
 
-* prevent unsafe Claude credential refresh ([#128](https://github.com/kunchenguid/quota-axi/issues/128)) ([7fbe64c](https://github.com/kunchenguid/quota-axi/commit/7fbe64c2fdad35b6d4a3c952f7c78fc36282e7ac))
-* **tui:** make the live report reachable in short terminals ([#125](https://github.com/kunchenguid/quota-axi/issues/125)) ([a539fb0](https://github.com/kunchenguid/quota-axi/commit/a539fb0b51b46bc4cb14a0a2abdc6677c87874f9))
-
-## [0.1.32](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.31...quota-axi-v0.1.32) (2026-08-25)
-
-
-### Features
-
-* **providers:** delegate expired credential refresh to vendor CLIs ([#118](https://github.com/kunchenguid/quota-axi/issues/118)) ([3e29259](https://github.com/kunchenguid/quota-axi/commit/3e29259d41cadaa7547b3d4e93c8048b06d736d3))
-
-## [0.1.31](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.30...quota-axi-v0.1.31) (2026-08-25)
-
-
-### Features
-
-* **cursor:** report Grok Bot weekly usage as its own scope ([#113](https://github.com/kunchenguid/quota-axi/issues/113)) ([600da6f](https://github.com/kunchenguid/quota-axi/commit/600da6fc08111a64efb35eeeaf76f1184b446b24))
-* fetch Grok credits via Pi OAuth and fix Claude failure handling ([#116](https://github.com/kunchenguid/quota-axi/issues/116)) ([b371079](https://github.com/kunchenguid/quota-axi/commit/b371079fe5613f6773d51b34ea704aadb47e954f))
-
-
-### Bug Fixes
-
-* defer skill guidance to the live CLI ([#114](https://github.com/kunchenguid/quota-axi/issues/114)) ([5aa046d](https://github.com/kunchenguid/quota-axi/commit/5aa046d6fb6605fbed4753e5a9cbebec2ffa8136))
-
-## [0.1.30](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.29...quota-axi-v0.1.30) (2026-08-21)
-
-
-### Features
-
-* **providers:** add Antigravity quota support ([#60](https://github.com/kunchenguid/quota-axi/issues/60)) ([9d7f942](https://github.com/kunchenguid/quota-axi/commit/9d7f942c73ddcf4cd795408ff9439f87f9a61274))
-* **providers:** add Linux Cursor CLI credential source ([#2](https://github.com/kunchenguid/quota-axi/issues/2)) ([#98](https://github.com/kunchenguid/quota-axi/issues/98)) ([8c1d99e](https://github.com/kunchenguid/quota-axi/commit/8c1d99e52961384ac9b0ec499851a27bdb5c7401))
-
-
-### Bug Fixes
-
-* **cache:** scope Claude stale quota fallback to the current credential context ([#62](https://github.com/kunchenguid/quota-axi/issues/62)) ([edb9358](https://github.com/kunchenguid/quota-axi/commit/edb9358821e21ad03cba0312d5c342428ff0297f))
-
-## [0.1.29](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.28...quota-axi-v0.1.29) (2026-08-18)
-
-
-### Features
-
-* **cli:** consolidate quota output for agent decisions ([#102](https://github.com/kunchenguid/quota-axi/issues/102)) ([e3e7939](https://github.com/kunchenguid/quota-axi/commit/e3e793995bedb855f42d754d0bdad7abd998759c))
-
-## [0.1.28](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.27...quota-axi-v0.1.28) (2026-08-14)
-
-
-### Bug Fixes
-
-* **providers:** resolve Cursor monthly pace and runway ([#94](https://github.com/kunchenguid/quota-axi/issues/94)) ([ff89e7a](https://github.com/kunchenguid/quota-axi/commit/ff89e7a41fe1053781310fc842442182e7389f51))
-
-## [0.1.27](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.26...quota-axi-v0.1.27) (2026-08-14)
-
-
-### Features
-
-* **cursor:** report effective remaining across quota windows ([#92](https://github.com/kunchenguid/quota-axi/issues/92)) ([649cede](https://github.com/kunchenguid/quota-axi/commit/649cede0bbad8bf44bbe52668a722b8976f4996d))
-
-## [0.1.26](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.25...quota-axi-v0.1.26) (2026-08-13)
-
-
-### Bug Fixes
-
-* **providers:** prefer verifiably live credentials ([#90](https://github.com/kunchenguid/quota-axi/issues/90)) ([48892fc](https://github.com/kunchenguid/quota-axi/commit/48892fc92816c68f15b13039f5e886d213b7e091))
-
-## [0.1.25](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.24...quota-axi-v0.1.25) (2026-08-13)
-
-
-### Bug Fixes
-
-* **cursor:** report CLI Keychain quota attempts and remedies ([#87](https://github.com/kunchenguid/quota-axi/issues/87)) ([bad10f1](https://github.com/kunchenguid/quota-axi/commit/bad10f12ad60b50021243e0ab103d016ff928e32))
-
-## [0.1.24](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.23...quota-axi-v0.1.24) (2026-08-12)
-
-
-### Bug Fixes
-
-* **tui:** render unbounded providers as per-window cards ([#82](https://github.com/kunchenguid/quota-axi/issues/82)) ([7caff26](https://github.com/kunchenguid/quota-axi/commit/7caff26e9dfe86580a1d8d54371a2541c1d3076b))
-
-## [0.1.23](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.22...quota-axi-v0.1.23) (2026-08-12)
-
-
-### Features
-
-* **cursor:** detect Cursor CLI Keychain auth ([#80](https://github.com/kunchenguid/quota-axi/issues/80)) ([6b7ff55](https://github.com/kunchenguid/quota-axi/commit/6b7ff55041b3b42529639a8ee6e4365822aa542f))
-
-## [0.1.22](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.21...quota-axi-v0.1.22) (2026-08-12)
-
-
-### Bug Fixes
-
-* **tui:** align headline marker with binding window ([#78](https://github.com/kunchenguid/quota-axi/issues/78)) ([37a49dc](https://github.com/kunchenguid/quota-axi/commit/37a49dcf8a7d3f54e93787e0efdbcb8807e33e22))
+* **release:** run test suite before publish ([59c8cd5](https://github.com/zaphodis42/quota-axi/commit/59c8cd5b6e2b47a602b91ac048e9eba31636014b))
 
 ## [0.1.21](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.20...quota-axi-v0.1.21) (2026-08-11)
 
