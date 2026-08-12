@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/zaphodis42/quota-axi/compare/quota-axi-v0.1.0...quota-axi-v0.1.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* **release:** run test suite before publish ([59c8cd5](https://github.com/zaphodis42/quota-axi/commit/59c8cd5b6e2b47a602b91ac048e9eba31636014b))
+
 ## [0.1.21](https://github.com/kunchenguid/quota-axi/compare/quota-axi-v0.1.20...quota-axi-v0.1.21) (2026-08-11)
 
 
