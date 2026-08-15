@@ -6,6 +6,7 @@ import {
   shortWindowLabel,
   thinBar,
 } from "../src/tui.js";
+import { withQuotaSemantics } from "../src/interpretation.js";
 import type { ProviderQuota, QuotaAxiResponse } from "../src/types.js";
 
 const GENERATED_AT = "2026-08-06T23:21:15.000Z";
@@ -379,6 +380,54 @@ describe("renderQuotaTui structure", () => {
       timeZone: "America/Los_Angeles",
     }).split("\n");
     expect(findCardLine(lines, 0, "97% session")).toBeDefined();
+  });
+
+  it("uses the mapped headline window's reset marker instead of another window's runway", () => {
+    for (const [mappedId, otherId] of [
+      ["five_hour", "seven_day"],
+      ["seven_day", "five_hour"],
+    ]) {
+      const response = fixtureResponse();
+      const claude = response.providers[0];
+      const mapped = claude.windows.find((window) => window.id === mappedId);
+      const other = claude.windows.find((window) => window.id === otherId);
+      const availability = claude.quotaSemantics?.effectiveAvailability[0];
+      expect(mapped).toBeDefined();
+      expect(other).toBeDefined();
+      expect(availability).toBeDefined();
+      if (!mapped || !other || !availability) continue;
+
+      mapped.percentRemaining = 84;
+      mapped.pace = { ...mapped.pace, timeRemainingPercent: 19.7 };
+      other.percentRemaining = 95;
+      other.pace = { ...other.pace, timeRemainingPercent: 97.3 };
+      availability.effectivePercentRemaining = 84;
+      availability.limitingWindowIds = [mapped.id];
+      availability.runway = {
+        status: "projected_exhaustion",
+        usableRunwaySeconds: 360000,
+        limitingWindowId: other.id,
+        projectionConfidence: "established",
+        projectionBasis: "cycle_average",
+      };
+      response.providers = [claude];
+
+      const lines = renderQuotaTui(response, {
+        timeZone: "America/Los_Angeles",
+      }).split("\n");
+      const headlineIndex = lines.findIndex((line) =>
+        line.includes(`84% ${mapped.label}`),
+      );
+      expect(headlineIndex).toBeGreaterThanOrEqual(0);
+      const headlineBar = lines[headlineIndex + 1];
+      const mappedRow = findLine(lines, `│   ${mapped.label}`);
+
+      // The main and sub-bars use different widths, but both must position the
+      // marker from their mapped window's reset clock (19.7%), not the other
+      // window's runway projection.
+      expect(headlineBar).toContain(barText(thinBar(84, 19.7, 41)));
+      expect(mappedRow).toContain(barText(thinBar(84, 19.7, 22)));
+    }
   });
 
   it("compacts tied limiting windows and falls back to the scope wording", () => {
@@ -787,12 +836,7 @@ describe("renderQuotaTui structure", () => {
     const claude = response.providers[0];
     claude.state.status = "stale";
     claude.state.stale = true;
-    claude.quotaSemantics = {
-      status: "unknown",
-      description: "test",
-      effectiveAvailability: [],
-    };
-    for (const window of claude.windows) delete window.pace;
+    response.providers[0] = withQuotaSemantics(claude, GENERATED_AT);
     const lines = renderQuotaTui(response, {
       timeZone: "America/Los_Angeles",
     }).split("\n");
@@ -803,6 +847,194 @@ describe("renderQuotaTui structure", () => {
       "runway unknown",
     );
   });
+});
+
+describe("cards for providers with no combinable bound", () => {
+  /**
+   * Copilot reports real per-window usage but quota-axi cannot say whether those
+   * windows are independent or jointly bounding, so the real interpretation
+   * yields no effective availability at all.
+   */
+  function copilotProvider(stale = false): ProviderQuota {
+    const window = (
+      id: string,
+      label: string,
+      percentUsed: number,
+    ): ProviderQuota["windows"][number] => ({
+      id,
+      label,
+      kind: "monthly",
+      percentUsed,
+      percentRemaining: 100 - percentUsed,
+      resetsAt: "2026-08-20T00:00:00.000Z",
+    });
+    return withQuotaSemantics(
+      {
+        provider: "copilot",
+        label: "Copilot",
+        source: "api",
+        plan: "pro",
+        windows: [
+          window("chat", "chat", 42),
+          window("completions", "completions", 12),
+          window("premium_interactions", "premium interactions", 0),
+        ],
+        state: {
+          status: stale ? "stale" : "fresh",
+          stale,
+          checkedAt: GENERATED_AT,
+          sourcesTried: ["apps-json"],
+        },
+      },
+      GENERATED_AT,
+    );
+  }
+
+  function renderWithCopilot(stale = false): string[] {
+    return renderQuotaTui(
+      {
+        generatedAt: GENERATED_AT,
+        schemaVersion: 3,
+        providers: [claudeProvider(), copilotProvider(stale)],
+      },
+      { timeZone: "America/Los_Angeles" },
+    ).split("\n");
+  }
+
+  function unfamiliarClaude(stale: boolean): ProviderQuota {
+    const provider = claudeProvider();
+    provider.windows.push({
+      id: "unexpected_limit",
+      label: "unexpected limit",
+      kind: "weekly",
+      percentUsed: 20,
+      percentRemaining: 80,
+      resetsAt: "2026-08-12T00:00:00.000Z",
+    });
+    provider.state.status = stale ? "stale" : "fresh";
+    provider.state.stale = stale;
+    return withQuotaSemantics(provider, GENERATED_AT);
+  }
+
+  it("names the card per-window instead of showing unknown headroom", () => {
+    const lines = renderWithCopilot();
+    const headline = findCardLine(lines, 1, "per-window usage");
+    expect(headline).toContain("no combined bound");
+    const card = lines.map((line) => line.slice(CARD_COLUMNS + 2)).join("\n");
+    expect(card).not.toContain("effective unknown");
+    expect(card).not.toContain("runway unknown");
+  });
+
+  it("drops the empty effective bar rather than rendering an empty track", () => {
+    const lines = renderWithCopilot();
+    const emptyTrack = lines
+      .map((line) => stripAnsi(line).slice(CARD_COLUMNS + 2))
+      .filter((line) => /^\u2502\s+\u2500{10,}\s+\u2502$/.test(line));
+    expect(emptyTrack).toHaveLength(0);
+  });
+
+  it("keeps the per-window rows it does have", () => {
+    const lines = renderWithCopilot();
+    expect(findCardLine(lines, 1, "chat")).toContain("58%");
+    expect(findCardLine(lines, 1, "comple")).toContain("88%");
+    expect(findCardLine(lines, 1, "premiu")).toContain("100%");
+  });
+
+  it("still marks the card stale when the snapshot is stale", () => {
+    const lines = renderWithCopilot(true);
+    expect(findCardLine(lines, 1, "\u25cf copilot")).toContain("stale");
+    expect(findCardLine(lines, 1, "stale \u00b7 per-window usage")).toContain(
+      "no combined bound",
+    );
+  });
+
+  it("renders Cursor's jointly bounded card with its effective bar", () => {
+    const cursor = withQuotaSemantics(
+      {
+        provider: "cursor",
+        label: "Cursor",
+        source: "state-vscdb",
+        plan: "pro",
+        windows: [
+          {
+            id: "included_usage",
+            label: "included usage",
+            kind: "monthly",
+            percentUsed: 42,
+            percentRemaining: 58,
+            resetsAt: "2026-08-20T00:00:00.000Z",
+          },
+          {
+            id: "auto_usage",
+            label: "auto usage",
+            kind: "monthly",
+            percentUsed: 12,
+            percentRemaining: 88,
+            resetsAt: "2026-08-20T00:00:00.000Z",
+          },
+        ],
+        state: {
+          status: "fresh",
+          stale: false,
+          refreshedAt: GENERATED_AT,
+          sourcesTried: ["state-vscdb"],
+        },
+      },
+      GENERATED_AT,
+    );
+    const lines = renderQuotaTui(
+      {
+        generatedAt: GENERATED_AT,
+        schemaVersion: 3,
+        providers: [claudeProvider(), cursor],
+      },
+      { timeZone: "America/Los_Angeles" },
+    ).split("\n");
+
+    expect(findCardLine(lines, 1, "58%")).toContain("includ");
+    const card = lines.map((line) => line.slice(CARD_COLUMNS + 2)).join("\n");
+    expect(card).not.toContain("no combined bound");
+  });
+
+  it("leaves a provider with combinable bounds rendering its effective bar", () => {
+    const lines = renderWithCopilot();
+    const withoutCopilot = renderQuotaTui(
+      {
+        generatedAt: GENERATED_AT,
+        schemaVersion: 3,
+        providers: [claudeProvider()],
+      },
+      { timeZone: "America/Los_Angeles" },
+    ).split("\n");
+    const claudeCard = lines.map((line) => line.slice(0, CARD_COLUMNS));
+    expect(claudeCard.slice(2, 2 + withoutCopilot.length - 2)).toEqual(
+      withoutCopilot.slice(2).map((line) => line.slice(0, CARD_COLUMNS)),
+    );
+    expect(findCardLine(lines, 0, "72% week")).toBeDefined();
+  });
+
+  it.each([
+    ["fresh", false, "effective unknown"],
+    ["stale", true, "stale · effective unknown"],
+  ])(
+    "keeps the %s effective headline for partially understood providers",
+    (_label, stale, headline) => {
+      const output = renderQuotaTui(
+        {
+          generatedAt: GENERATED_AT,
+          schemaVersion: 3,
+          providers: [unfamiliarClaude(stale)],
+        },
+        { timeZone: "America/Los_Angeles" },
+      );
+      const lines = output.split("\n");
+      expect(findLine(lines, headline)).toContain("runway unknown");
+      expect(output).not.toContain("per-window usage");
+      expect(
+        lines.some((line) => /^│\s+─{10,}\s+│$/.test(stripAnsi(line))),
+      ).toBe(true);
+    },
+  );
 });
 
 describe("thin bars with pace markers", () => {
