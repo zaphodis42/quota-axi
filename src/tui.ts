@@ -209,6 +209,44 @@ function buildLiveCard(provider: ProviderQuota, generatedAtMs: number): Card {
   ];
 
   const headline = pickHeadlineAvailability(provider);
+  if (hasWhollyUnknownWindowRelationships(provider)) {
+    lines.push(...windowsOnlyHeadline(stale));
+  } else {
+    lines.push(...effectiveHeadline(provider, headline, stale));
+  }
+
+  if (provider.windows.length > 0) {
+    lines.push(interior([], "border"));
+    for (const window of provider.windows) {
+      lines.push(interior(windowRow(window, generatedAtMs), "border"));
+    }
+  }
+
+  for (const note of cardNotes(provider)) {
+    lines.push(
+      interior(
+        [{ text: `   ${truncate(note, CARD_INTERIOR - 4)}`, style: "dimmer" }],
+        "border",
+      ),
+    );
+  }
+
+  lines.push(interior([], "border"));
+  lines.push(bottomLine("border"));
+  return lines;
+}
+
+/**
+ * The standard effective-headroom block: the binding window's percentage, its
+ * runway verdict, and the effective bar. It also preserves the existing
+ * unknown fallback for zero-window and partially understood providers.
+ */
+function effectiveHeadline(
+  provider: ProviderQuota,
+  headline: EffectiveAvailability | undefined,
+  stale: boolean | undefined,
+): Line[] {
+  const lines: Line[] = [];
   const effectivePct = headline?.effectivePercentRemaining;
   const markerPct = effectiveMarkerPercent(provider, headline);
 
@@ -261,26 +299,50 @@ function buildLiveCard(provider: ProviderQuota, generatedAtMs: number): Card {
       "border",
     ),
   );
-
-  if (provider.windows.length > 0) {
-    lines.push(interior([], "border"));
-    for (const window of provider.windows) {
-      lines.push(interior(windowRow(window, generatedAtMs), "border"));
-    }
-  }
-
-  for (const note of cardNotes(provider)) {
-    lines.push(
-      interior(
-        [{ text: `   ${truncate(note, CARD_INTERIOR - 4)}`, style: "dimmer" }],
-        "border",
-      ),
-    );
-  }
-
-  lines.push(interior([], "border"));
-  lines.push(bottomLine("border"));
   return lines;
+}
+
+/**
+ * The headline block for a provider that reports real per-window usage but no
+ * combinable bound: quota-axi does not know whether those windows are
+ * independent or jointly bounding, so there is no combined
+ * effective percentage, pace, or runway to show. Rendering the empty effective
+ * bar there reads as a failure, so the block is replaced by a single line naming
+ * what the card actually is - the per-window rows below carry the real data.
+ */
+function hasWhollyUnknownWindowRelationships(provider: ProviderQuota): boolean {
+  const semantics = provider.quotaSemantics;
+  if (
+    provider.windows.length === 0 ||
+    semantics?.status !== "unknown" ||
+    semantics.unresolvedWindowIds === undefined
+  ) {
+    return false;
+  }
+  const unresolved = new Set(semantics.unresolvedWindowIds);
+  return provider.windows.every(({ id }) => unresolved.has(id));
+}
+
+function windowsOnlyHeadline(stale: boolean | undefined): Line[] {
+  const left: Line = [
+    {
+      text: stale ? "stale · per-window usage" : "per-window usage",
+      style: "dim",
+    },
+  ];
+  const right: Line = [{ text: "no combined bound", style: "dim" }];
+  // Without the effective bar under it, this line's right edge belongs with the
+  // window rows' reset column rather than the (absent) bar's end.
+  return [
+    interior(
+      [
+        { text: "   " },
+        ...padBetween(left, right, CARD_INTERIOR - 4),
+        { text: " " },
+      ],
+      "border",
+    ),
+  ];
 }
 
 function buildFailedCard(provider: ProviderQuota): Card {
@@ -444,8 +506,10 @@ function effectiveMarkerPercent(
   headline: EffectiveAvailability | undefined,
 ): number | undefined {
   if (!headline) return undefined;
-  const limitingId =
-    headline.runway?.limitingWindowId ?? headline.limitingWindowIds?.[0];
+  // The headline bar represents effective headroom, so its reset marker must
+  // follow that headroom's binding window. A finite runway can be constrained
+  // by another window and is rendered as the separate "empty in" verdict.
+  const limitingId = headline.limitingWindowIds?.[0];
   if (limitingId === undefined) return undefined;
   const limiting = provider.windows.find((window) => window.id === limitingId);
   return limiting?.pace?.timeRemainingPercent;
