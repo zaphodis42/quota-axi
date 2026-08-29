@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.1.2](https://github.com/zaphodis42/quota-axi/compare/quota-axi-v0.1.1...quota-axi-v0.1.2) (2026-08-29)
+
+
+### Features
+
+* add Z.ai Coding Plan quota provider ([08bb26a](https://github.com/zaphodis42/quota-axi/commit/08bb26a510e2185bfe79664c5145e1f9aac5f330)), closes [#2](https://github.com/zaphodis42/quota-axi/issues/2)
+* **cli:** consolidate quota output for agent decisions ([#102](https://github.com/zaphodis42/quota-axi/issues/102)) ([e3e7939](https://github.com/zaphodis42/quota-axi/commit/e3e793995bedb855f42d754d0bdad7abd998759c))
+* **cursor:** detect Cursor CLI Keychain auth ([#80](https://github.com/zaphodis42/quota-axi/issues/80)) ([6b7ff55](https://github.com/zaphodis42/quota-axi/commit/6b7ff55041b3b42529639a8ee6e4365822aa542f))
+* **cursor:** report effective remaining across quota windows ([#92](https://github.com/zaphodis42/quota-axi/issues/92)) ([649cede](https://github.com/zaphodis42/quota-axi/commit/649cede0bbad8bf44bbe52668a722b8976f4996d))
+* **cursor:** report Grok Bot weekly usage as its own scope ([#113](https://github.com/zaphodis42/quota-axi/issues/113)) ([600da6f](https://github.com/zaphodis42/quota-axi/commit/600da6fc08111a64efb35eeeaf76f1184b446b24))
+* fetch Grok credits via Pi OAuth and fix Claude failure handling ([#116](https://github.com/zaphodis42/quota-axi/issues/116)) ([b371079](https://github.com/zaphodis42/quota-axi/commit/b371079fe5613f6773d51b34ea704aadb47e954f))
+* **providers:** add Antigravity quota support ([#60](https://github.com/zaphodis42/quota-axi/issues/60)) ([9d7f942](https://github.com/zaphodis42/quota-axi/commit/9d7f942c73ddcf4cd795408ff9439f87f9a61274))
+* **providers:** add Cursor CLI Keychain auth, credential probing ([f38b8b2](https://github.com/zaphodis42/quota-axi/commit/f38b8b231e2cf6b1bfceeb2ee3b5d4cbdf878e9b))
+* **providers:** add explicit Antigravity quota reporting ([58ddc07](https://github.com/zaphodis42/quota-axi/commit/58ddc07dd7c827e56b815ce29c857dfe72169224))
+* **providers:** add Linux Cursor CLI credential source ([#2](https://github.com/zaphodis42/quota-axi/issues/2)) ([#98](https://github.com/zaphodis42/quota-axi/issues/98)) ([8c1d99e](https://github.com/zaphodis42/quota-axi/commit/8c1d99e52961384ac9b0ec499851a27bdb5c7401))
+* **providers:** delegate expired credential refresh to vendor CLIs ([#118](https://github.com/zaphodis42/quota-axi/issues/118)) ([3e29259](https://github.com/zaphodis42/quota-axi/commit/3e29259d41cadaa7547b3d4e93c8048b06d736d3))
+
+
+### Bug Fixes
+
+* **cache:** scope Claude stale quota fallback to the current credential context ([#62](https://github.com/zaphodis42/quota-axi/issues/62)) ([edb9358](https://github.com/zaphodis42/quota-axi/commit/edb9358821e21ad03cba0312d5c342428ff0297f))
+* **cursor:** report CLI Keychain quota attempts and remedies ([#87](https://github.com/zaphodis42/quota-axi/issues/87)) ([bad10f1](https://github.com/zaphodis42/quota-axi/commit/bad10f12ad60b50021243e0ab103d016ff928e32))
+* defer skill guidance to the live CLI ([#114](https://github.com/zaphodis42/quota-axi/issues/114)) ([5aa046d](https://github.com/zaphodis42/quota-axi/commit/5aa046d6fb6605fbed4753e5a9cbebec2ffa8136))
+* keep TUI viewport within terminal bounds ([#129](https://github.com/zaphodis42/quota-axi/issues/129)) ([14270a8](https://github.com/zaphodis42/quota-axi/commit/14270a8e502adf0e753ddfe7b59b1080fc251e5d))
+* prevent unsafe Claude credential refresh ([#128](https://github.com/zaphodis42/quota-axi/issues/128)) ([7fbe64c](https://github.com/zaphodis42/quota-axi/commit/7fbe64c2fdad35b6d4a3c952f7c78fc36282e7ac))
+* **providers:** prefer verifiably live credentials ([#90](https://github.com/zaphodis42/quota-axi/issues/90)) ([48892fc](https://github.com/zaphodis42/quota-axi/commit/48892fc92816c68f15b13039f5e886d213b7e091))
+* **providers:** resolve Cursor monthly pace and runway ([#94](https://github.com/zaphodis42/quota-axi/issues/94)) ([ff89e7a](https://github.com/zaphodis42/quota-axi/commit/ff89e7a41fe1053781310fc842442182e7389f51))
+* **release:** run test suite before publish ([a94059c](https://github.com/zaphodis42/quota-axi/commit/a94059c2cd13e552ef6159218643e3401a8d3d4f))
+* **tui:** align headline marker with binding window ([#78](https://github.com/zaphodis42/quota-axi/issues/78)) ([37a49dc](https://github.com/zaphodis42/quota-axi/commit/37a49dcf8a7d3f54e93787e0efdbcb8807e33e22))
+* **tui:** make the live report reachable in short terminals ([#125](https://github.com/zaphodis42/quota-axi/issues/125)) ([a539fb0](https://github.com/zaphodis42/quota-axi/commit/a539fb0b51b46bc4cb14a0a2abdc6677c87874f9))
+* **tui:** render unbounded providers as per-window cards ([#82](https://github.com/zaphodis42/quota-axi/issues/82)) ([7caff26](https://github.com/zaphodis42/quota-axi/commit/7caff26e9dfe86580a1d8d54371a2541c1d3076b))
+* **zai:** stop retiring cache on undecodable bodies, drop known+unresolved contradiction ([ed4e9cb](https://github.com/zaphodis42/quota-axi/commit/ed4e9cb8abb88b40a4601ce7eb6cd889f898d465))
+
 ## [0.1.1](https://github.com/zaphodis42/quota-axi/compare/quota-axi-v0.1.0...quota-axi-v0.1.1) (2026-08-12)
 
 
