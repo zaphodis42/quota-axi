@@ -5,6 +5,7 @@ import {
   quotaCommand,
   type QuotaContext,
 } from "./commands.js";
+import { PROVIDER_IDS } from "./types.js";
 import { VERSION } from "./version.js";
 
 export const DESCRIPTION =
@@ -15,18 +16,22 @@ commands[3]:
   (none)=quota, auth, models
 output:
   Default TOON reports local quota evidence. models is a deterministic data join; --sort runway is explicit opt-in ordering. --tui renders a live human terminal report instead (q quits).
-flags[11]:
-  --provider <claude,codex,cursor,copilot,grok,kimi,zai-coding-plan,antigravity>, --json, --full, --tui, --refresh <30s-24h>, --once, --allow-keychain-prompt, --intelligence <high|medium|low>, --sort <runway>, --help, -v/--version
+notes:
+  Every quota read, including each --tui refresh, may delegate an expired session's renewal to the vendor CLI that owns it. --no-credential-refresh keeps a read strictly read-only; auth always is.
+flags[12]:
+  --provider <${PROVIDER_IDS.join(",")}>, --json, --full, --tui, --refresh <30s-24h>, --once, --allow-keychain-prompt, --no-credential-refresh, --intelligence <high|medium|low>, --sort <runway>, --help, -v/--version
 examples:
   quota-axi
   quota-axi --provider claude
-  quota-axi --provider cursor,copilot,grok,kimi,zai-coding-plan
-  quota-axi --provider cursor,copilot,grok,kimi,antigravity
+  quota-axi --provider agy
+  quota-axi --provider cursor,copilot,grok,kimi,zai
   quota-axi --json
   quota-axi --full
   quota-axi --tui
   quota-axi --tui --refresh 1m
   quota-axi --tui --once
+  quota-axi --no-credential-refresh
+  quota-axi --tui --no-credential-refresh
   quota-axi auth
   quota-axi models --intelligence high
   quota-axi models --sort runway

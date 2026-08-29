@@ -23,8 +23,6 @@ export type TuiOptions = {
   full?: boolean;
   /** IANA time zone for header/absolute times; defaults to the system zone. */
   timeZone?: string;
-  /** Dim closing line used by the live report for its key hint. */
-  footerHint?: string;
 };
 
 const CARD_WIDTH = 49;
@@ -73,6 +71,8 @@ const ACCENTS: Record<ProviderId, StyleSpec> = {
   copilot: { rgb: [116, 199, 236], ansi16: "94", bold: true },
   grok: { rgb: [180, 190, 254], ansi16: "95", bold: true },
   kimi: { rgb: [245, 194, 231], ansi16: "95", bold: true },
+  zai: { rgb: [129, 216, 209], ansi16: "96", bold: true },
+  agy: { rgb: [232, 184, 109], ansi16: "93", bold: true },
   "zai-coding-plan": { rgb: [203, 166, 247], ansi16: "95", bold: true },
   antigravity: { rgb: [166, 227, 161], ansi16: "92", bold: true },
 };
@@ -121,10 +121,7 @@ export function renderQuotaTui(
   response: QuotaAxiResponse,
   options: TuiOptions = {},
 ): string {
-  const columns = Math.min(
-    MAX_COLUMNS,
-    Math.max(MIN_COLUMNS, options.columns ?? TWO_COLUMN_MIN),
-  );
+  const columns = resolveColumns(options.columns);
   const twoColumn = columns >= TWO_COLUMN_MIN;
   const generatedAtMs = Date.parse(response.generatedAt);
   const timeZone = options.timeZone;
@@ -147,16 +144,31 @@ export function renderQuotaTui(
       }
     }
   }
-  if (options.footerHint !== undefined) {
-    lines.push([]);
-    lines.push([
-      { text: `  ${truncate(options.footerHint, columns - 2)}`, style: "dim" },
-    ]);
-  }
-
   return lines
     .map((line) => renderLine(trimRight(line), options.colorDepth ?? "none"))
     .join("\n");
+}
+
+/**
+ * The report's dim closing line, rendered on its own so the live viewport can
+ * pin it to the last row instead of letting it scroll away with the cards.
+ */
+export function renderTuiHintLine(
+  text: string,
+  options: TuiOptions = {},
+): string {
+  const columns = resolveColumns(options.columns);
+  const line: Line = [
+    { text: `  ${truncate(text, columns - 2)}`, style: "dim" },
+  ];
+  return renderLine(trimRight(line), options.colorDepth ?? "none");
+}
+
+function resolveColumns(columns: number | undefined): number {
+  return Math.min(
+    MAX_COLUMNS,
+    Math.max(MIN_COLUMNS, columns ?? TWO_COLUMN_MIN),
+  );
 }
 
 function isLive(provider: ProviderQuota): boolean {
@@ -702,7 +714,8 @@ function fullFooterLines(provider: ProviderQuota, width: number): string[] {
     (attempt) =>
       `${attempt.source} (${attempt.status}${attempt.error ? `: ${attempt.error}` : ""})`,
   );
-  const tried = attempts.length > 0 ? attempts : provider.state.sourcesTried;
+  const tried =
+    attempts.length > 0 ? attempts : (provider.state.sourcesTried ?? []);
   const completeParts = [...accountParts];
   if (tried.length > 0) completeParts.push(`tried ${tried.join(" → ")}`);
   const complete = completeParts.join(" · ");
@@ -715,7 +728,7 @@ function fullFooterLines(provider: ProviderQuota, width: number): string[] {
     );
   } else {
     lines.push(
-      ...provider.state.sourcesTried.map((source) =>
+      ...(provider.state.sourcesTried ?? []).map((source) =>
         truncate(`  tried ${source}`, width),
       ),
     );
@@ -919,11 +932,11 @@ function displayWidth(text: string): number {
   return width;
 }
 
-function terminalTextUnits(text: string): string[] {
+export function terminalTextUnits(text: string): string[] {
   return [...GRAPHEME_SEGMENTER.segment(text)].map((part) => part.segment);
 }
 
-function sanitizeTerminalText(text: string): string {
+export function sanitizeTerminalText(text: string): string {
   let result = "";
   for (const character of text) {
     const codePoint = character.codePointAt(0) ?? 0;
@@ -936,7 +949,7 @@ function sanitizeTerminalText(text: string): string {
   return result;
 }
 
-function terminalUnitWidth(unit: string): number {
+export function terminalUnitWidth(unit: string): number {
   if (
     /\p{Emoji_Presentation}/u.test(unit) ||
     (/\p{Emoji}/u.test(unit) &&

@@ -7,13 +7,20 @@ import { createModelsResponse, MODEL_CATALOG_PROVIDER_IDS } from "./models.js";
 import { nowIso } from "./lib/time.js";
 import { PROVIDERS } from "./providers/index.js";
 import {
+  quotaJsonReport,
   redactedResponse,
   renderAuthToon,
   renderModelsToon,
   renderQuotaToon,
 } from "./render.js";
 import { formatInterval, runLiveTui, type LiveTuiIo } from "./tui-live.js";
-import { detectTuiColorDepth, renderQuotaTui } from "./tui.js";
+import {
+  detectTuiColorDepth,
+  renderQuotaTui,
+  renderTuiHintLine,
+  type TuiColorDepth,
+} from "./tui.js";
+import { scrollHint } from "./tui-viewport.js";
 import type {
   AuthProviderReport,
   ProviderId,
@@ -36,15 +43,19 @@ export async function quotaCommand(
   const flags = parseFlags(args);
   const options: ProviderOptions = {
     allowKeychainPrompt: flags.allowKeychainPrompt,
+    refreshCredentials: !flags.noCredentialRefresh,
   };
 
   if (flags.tui) return quotaTuiReport(flags, options);
 
   const response = await loadQuota(flags.providers, options, false);
-  const redacted = redactedResponse(response, flags.full);
   return flags.json
-    ? JSON.stringify(redacted, null, 2)
-    : renderQuotaToon(redacted, binPath, flags.full);
+    ? JSON.stringify(quotaJsonReport(response, flags.full), null, 2)
+    : renderQuotaToon(
+        redactedResponse(response, flags.full),
+        binPath,
+        flags.full,
+      );
 }
 
 /**
@@ -56,15 +67,16 @@ async function quotaTuiReport(
   flags: QuotaFlags,
   options: ProviderOptions,
 ): Promise<string> {
-  const frame = (response: QuotaAxiResponse, footerHint?: string): string =>
+  const terminal = (): { columns?: number; colorDepth: TuiColorDepth } => ({
+    ...(process.stdout.columns === undefined
+      ? {}
+      : { columns: process.stdout.columns }),
+    colorDepth: detectTuiColorDepth(process.env, process.stdout.isTTY === true),
+  });
+  const frame = (response: QuotaAxiResponse): string =>
     renderQuotaTui(redactedResponse(response, flags.full), {
-      columns: process.stdout.columns,
-      colorDepth: detectTuiColorDepth(
-        process.env,
-        process.stdout.isTTY === true,
-      ),
+      ...terminal(),
       full: flags.full,
-      ...(footerHint === undefined ? {} : { footerHint }),
     });
 
   if (flags.once || !isInteractiveTerminal()) {
@@ -75,7 +87,8 @@ async function quotaTuiReport(
   const hint = `Press q to quit · refreshing every ${formatInterval(refreshSeconds)}`;
   const last = await runLiveTui<QuotaAxiResponse>({
     load: () => loadQuota(flags.providers, options, true),
-    render: (response) => frame(response, hint),
+    render: frame,
+    status: (scroll) => renderTuiHintLine(scrollHint(scroll, hint), terminal()),
     intervalMillis: refreshSeconds * 1000,
     io: processLiveTuiIo(),
   });
@@ -90,6 +103,8 @@ function processLiveTuiIo(): LiveTuiIo {
   return {
     stdout: process.stdout,
     stdin: process.stdin,
+    rows: () => process.stdout.rows,
+    columns: () => process.stdout.columns,
     setTimer: (callback, milliseconds) => setTimeout(callback, milliseconds),
     clearTimer: (handle) => {
       clearTimeout(handle as ReturnType<typeof setTimeout>);
@@ -135,6 +150,7 @@ export async function modelsCommand(
   const flags = parseModelsFlags(args);
   const options: ProviderOptions = {
     allowKeychainPrompt: flags.allowKeychainPrompt,
+    refreshCredentials: !flags.noCredentialRefresh,
   };
   const quota = await fetchQuota(flags.providers, options);
   writeCachedProvidersBestEffort(quota.providers);
@@ -165,8 +181,11 @@ export async function authCommand(
       ["Run `quota-axi --tui` for the human quota report"],
     );
   }
+  // `auth` reports the credential state that is on disk right now, so it never
+  // delegates a refresh even when the quota path would.
   const options: ProviderOptions = {
     allowKeychainPrompt: flags.allowKeychainPrompt,
+    refreshCredentials: false,
   };
 
   const reports = await inspectAuth(flags.providers, options);

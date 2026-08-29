@@ -3,261 +3,19 @@ import {
   detectTuiColorDepth,
   formatCountdown,
   renderQuotaTui,
+  renderTuiHintLine,
   shortWindowLabel,
   thinBar,
 } from "../src/tui.js";
 import { withQuotaSemantics } from "../src/interpretation.js";
-import type { ProviderQuota, QuotaAxiResponse } from "../src/types.js";
+import type { ProviderQuota } from "../src/types.js";
+import {
+  claudeProvider,
+  fixtureResponse,
+  GENERATED_AT,
+} from "./fixtures/tui-response.js";
 
-const GENERATED_AT = "2026-08-06T23:21:15.000Z";
 const CARD_COLUMNS = 49;
-
-function claudeProvider(): ProviderQuota {
-  return {
-    provider: "claude",
-    label: "Claude",
-    source: "oauth",
-    plan: "max",
-    windows: [
-      {
-        id: "five_hour",
-        label: "session",
-        kind: "session",
-        percentUsed: 3,
-        percentRemaining: 97,
-        resetsAt: "2026-08-07T04:00:00.000Z",
-        windowSeconds: 18000,
-        pace: {
-          status: "behind",
-          timeRemainingPercent: 92.9,
-          elapsedPercent: 7.1,
-          reservePercentPoints: 4.1,
-          burnMultiple: 0.42,
-        },
-      },
-      {
-        id: "seven_day",
-        label: "week",
-        kind: "weekly",
-        percentUsed: 28,
-        percentRemaining: 72,
-        resetsAt: "2026-08-11T21:00:00.000Z",
-        windowSeconds: 604800,
-        pace: {
-          status: "behind",
-          timeRemainingPercent: 70,
-          elapsedPercent: 30,
-          reservePercentPoints: 2,
-          burnMultiple: 0.93,
-        },
-      },
-      {
-        id: "model:fable",
-        label: "Fable week",
-        kind: "model",
-        percentUsed: 15,
-        percentRemaining: 85,
-        resetsAt: "2026-08-11T21:00:00.000Z",
-        windowSeconds: 604800,
-        pace: {
-          status: "behind",
-          timeRemainingPercent: 70,
-          elapsedPercent: 30,
-          reservePercentPoints: 15,
-          burnMultiple: 0.5,
-        },
-      },
-    ],
-    state: {
-      status: "fresh",
-      stale: false,
-      refreshedAt: GENERATED_AT,
-      sourcesTried: ["oauth-file", "keychain"],
-    },
-    quotaSemantics: {
-      status: "known",
-      description: "test",
-      effectiveAvailability: [
-        {
-          scope: "all_models",
-          status: "known",
-          effectivePercentRemaining: 72,
-          boundedBy: ["five_hour", "seven_day"],
-          limitingWindowIds: ["seven_day"],
-          pace: {
-            status: "behind",
-            behindWindowIds: ["five_hour", "seven_day"],
-          },
-          runway: {
-            status: "through_reset",
-            projectionConfidence: "early",
-            projectionBasis: "cycle_average",
-          },
-        },
-      ],
-    },
-  };
-}
-
-function codexProvider(): ProviderQuota {
-  return {
-    provider: "codex",
-    label: "Codex",
-    source: "oauth",
-    plan: "pro",
-    windows: [
-      {
-        id: "weekly",
-        label: "week",
-        kind: "weekly",
-        percentUsed: 95,
-        percentRemaining: 5,
-        resetsAt: "2026-08-08T03:35:39.000Z",
-        windowSeconds: 604800,
-        pace: {
-          status: "ahead",
-          timeRemainingPercent: 16.8,
-          elapsedPercent: 83.2,
-          reservePercentPoints: -11.8,
-          burnMultiple: 1.14,
-          projectedExhaustedAt: "2026-08-07T06:42:36.000Z",
-        },
-      },
-      {
-        id: "model:codex_bengalfox:7d",
-        label: "GPT-5.3-Codex-Spark week",
-        kind: "model",
-        percentUsed: 0,
-        percentRemaining: 100,
-        resetsAt: "2026-08-13T23:21:15.000Z",
-        windowSeconds: 604800,
-        pace: { status: "unknown", reason: "missing_usage" },
-      },
-    ],
-    state: {
-      status: "fresh",
-      stale: false,
-      refreshedAt: GENERATED_AT,
-      sourcesTried: ["oauth"],
-    },
-    quotaSemantics: {
-      status: "known",
-      description: "test",
-      effectiveAvailability: [
-        {
-          scope: "all_models",
-          status: "known",
-          effectivePercentRemaining: 5,
-          boundedBy: ["weekly"],
-          limitingWindowIds: ["weekly"],
-          pace: { status: "ahead", aheadWindowIds: ["weekly"] },
-          runway: {
-            status: "projected_exhaustion",
-            usableRunwaySeconds: 26481,
-            projectedExhaustedAt: "2026-08-07T06:42:36.000Z",
-            limitingWindowId: "weekly",
-            projectionConfidence: "established",
-            projectionBasis: "cycle_average",
-          },
-        },
-      ],
-    },
-  };
-}
-
-function grokProvider(): ProviderQuota {
-  return {
-    provider: "grok",
-    label: "Grok",
-    source: "web",
-    windows: [
-      {
-        id: "credits",
-        label: "credits",
-        kind: "credits",
-        percentUsed: 55,
-        percentRemaining: 45,
-        startsAt: "2026-08-03T19:59:29.000Z",
-        resetsAt: "2026-08-10T19:59:29.000Z",
-        pace: {
-          status: "ahead",
-          timeRemainingPercent: 55.1,
-          elapsedPercent: 44.9,
-          reservePercentPoints: -10.1,
-          burnMultiple: 1.23,
-          projectedExhaustedAt: "2026-08-09T14:33:15.000Z",
-        },
-      },
-    ],
-    state: {
-      status: "fresh",
-      stale: false,
-      refreshedAt: GENERATED_AT,
-      authStatus: "usable",
-      sourcesTried: ["web"],
-    },
-    quotaSemantics: {
-      status: "known",
-      description: "test",
-      effectiveAvailability: [
-        {
-          scope: "all_products",
-          status: "known",
-          effectivePercentRemaining: 45,
-          boundedBy: ["credits"],
-          limitingWindowIds: ["credits"],
-          pace: { status: "ahead", aheadWindowIds: ["credits"] },
-          runway: {
-            status: "projected_exhaustion",
-            usableRunwaySeconds: 221983,
-            projectedExhaustedAt: "2026-08-09T14:33:15.000Z",
-            limitingWindowId: "credits",
-            projectionConfidence: "established",
-            projectionBasis: "cycle_average",
-          },
-        },
-      ],
-    },
-  };
-}
-
-function signedOutProvider(
-  provider: "cursor" | "copilot" | "kimi",
-  error: string,
-): ProviderQuota {
-  return {
-    provider,
-    label: provider,
-    source: "unavailable",
-    windows: [],
-    state: {
-      status: "auth_required",
-      stale: false,
-      error,
-      sourcesTried: ["local"],
-    },
-    quotaSemantics: {
-      status: "unknown",
-      description: "test",
-      effectiveAvailability: [],
-    },
-  };
-}
-
-function fixtureResponse(): QuotaAxiResponse {
-  return {
-    generatedAt: GENERATED_AT,
-    schemaVersion: 3,
-    providers: [
-      claudeProvider(),
-      codexProvider(),
-      signedOutProvider("cursor", "Cursor sign-in required"),
-      signedOutProvider("copilot", "GitHub Copilot sign-in required"),
-      grokProvider(),
-      signedOutProvider("kimi", "unsupported_credential_type"),
-    ],
-  };
-}
 
 function render(options = {}): string[] {
   return renderQuotaTui(fixtureResponse(), {
@@ -408,7 +166,6 @@ describe("renderQuotaTui structure", () => {
         usableRunwaySeconds: 360000,
         limitingWindowId: other.id,
         projectionConfidence: "established",
-        projectionBasis: "cycle_average",
       };
       response.providers = [claude];
 
@@ -673,13 +430,16 @@ describe("renderQuotaTui structure", () => {
     expect(output).not.toContain("linear pace");
   });
 
-  it("appends the live key hint only when a footer hint is supplied", () => {
+  it("keeps the live key hint out of the report body", () => {
     expect(render().join("\n")).not.toContain("Press q to quit");
-    const live = render({
-      footerHint: "Press q to quit · refreshing every 5m",
-    });
-    expect(live.at(-1)).toBe("  Press q to quit · refreshing every 5m");
-    expect(live.at(-2)).toBe("");
+  });
+
+  it("renders the closing hint as its own indented line, fitted to width", () => {
+    const hint = "Press q to quit · refreshing every 5m";
+    expect(renderTuiHintLine(hint)).toBe(`  ${hint}`);
+    const squeezed = renderTuiHintLine("x".repeat(200), { columns: 80 });
+    expect(displayColumns(squeezed)).toBe(80);
+    expect(squeezed.endsWith("…")).toBe(true);
   });
 
   it("reflows to a single column below the two-up width", () => {
@@ -894,7 +654,7 @@ describe("cards for providers with no combinable bound", () => {
     return renderQuotaTui(
       {
         generatedAt: GENERATED_AT,
-        schemaVersion: 3,
+        schemaVersion: 5,
         providers: [claudeProvider(), copilotProvider(stale)],
       },
       { timeZone: "America/Los_Angeles" },
@@ -985,7 +745,7 @@ describe("cards for providers with no combinable bound", () => {
     const lines = renderQuotaTui(
       {
         generatedAt: GENERATED_AT,
-        schemaVersion: 3,
+        schemaVersion: 5,
         providers: [claudeProvider(), cursor],
       },
       { timeZone: "America/Los_Angeles" },
@@ -1001,7 +761,7 @@ describe("cards for providers with no combinable bound", () => {
     const withoutCopilot = renderQuotaTui(
       {
         generatedAt: GENERATED_AT,
-        schemaVersion: 3,
+        schemaVersion: 5,
         providers: [claudeProvider()],
       },
       { timeZone: "America/Los_Angeles" },
@@ -1022,7 +782,7 @@ describe("cards for providers with no combinable bound", () => {
       const output = renderQuotaTui(
         {
           generatedAt: GENERATED_AT,
-          schemaVersion: 3,
+          schemaVersion: 5,
           providers: [unfamiliarClaude(stale)],
         },
         { timeZone: "America/Los_Angeles" },
@@ -1128,7 +888,6 @@ describe("color handling", () => {
       usableRunwaySeconds: 3600,
       limitingWindowId: "seven_day",
       projectionConfidence: "established",
-      projectionBasis: "cycle_average",
     };
     const projected = renderQuotaTui(response, {
       colorDepth: "truecolor",
@@ -1143,7 +902,6 @@ describe("color handling", () => {
       status: "exhausted_now",
       usableRunwaySeconds: 0,
       projectionConfidence: "established",
-      projectionBasis: "cycle_average",
     };
     const exhausted = renderQuotaTui(response, {
       colorDepth: "truecolor",

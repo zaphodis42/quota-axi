@@ -1,781 +1,646 @@
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { spawn as realSpawn, type SpawnOptions } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { createServer, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { homedir, tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
-import {
-  AGY_BINARY_ENV,
-  fetchQuota,
-  inspectAuth,
-  normalizeAgyUsage,
-  runAgyCommand,
-} from "../../src/providers/agy.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readCachedProvider, writeCachedProviders } from "../../src/cache.js";
+import {
+  fetchQuotaWithRuntime,
+  inspectAuthWithRuntime,
+  normalizeAgyQuotaSummary,
+  normalizeAgyUserStatus,
+  portsFromLsof,
+  processInfosFromPs,
+  requestLoopbackJson,
+  type AgyConnectionEndpoint,
+  type AgyProbeRuntime,
+} from "../../src/providers/agy.js";
 import type { ProviderQuota } from "../../src/types.js";
 
-const fixtureDir = join(import.meta.dirname, "..", "fixtures", "agy");
-const originalAgyBinary = process.env[AGY_BINARY_ENV];
 const originalXdgCacheHome = process.env.XDG_CACHE_HOME;
-const originalOpenAiKey = process.env.OPENAI_API_KEY;
-const originalDbusSessionBus = process.env.DBUS_SESSION_BUS_ADDRESS;
-const originalHome = process.env.HOME;
-const originalUserProfile = process.env.USERPROFILE;
-let tempRoot: string | undefined;
+let tempDir: string | undefined;
+const servers: ReturnType<typeof createServer>[] = [];
 
-afterEach(() => {
-  if (originalAgyBinary === undefined) delete process.env[AGY_BINARY_ENV];
-  else process.env[AGY_BINARY_ENV] = originalAgyBinary;
+beforeEach(() => {
+  useTempCache();
+});
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+  await Promise.all(
+    servers.splice(0).map((server) => {
+      server.closeAllConnections();
+      return new Promise<void>((resolve) => server.close(() => resolve()));
+    }),
+  );
   if (originalXdgCacheHome === undefined) delete process.env.XDG_CACHE_HOME;
   else process.env.XDG_CACHE_HOME = originalXdgCacheHome;
-  if (originalOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
-  else process.env.OPENAI_API_KEY = originalOpenAiKey;
-  if (originalDbusSessionBus === undefined)
-    delete process.env.DBUS_SESSION_BUS_ADDRESS;
-  else process.env.DBUS_SESSION_BUS_ADDRESS = originalDbusSessionBus;
-  if (originalHome === undefined) delete process.env.HOME;
-  else process.env.HOME = originalHome;
-  if (originalUserProfile === undefined) delete process.env.USERPROFILE;
-  else process.env.USERPROFILE = originalUserProfile;
-  if (tempRoot) rmSync(tempRoot, { recursive: true, force: true });
-  tempRoot = undefined;
+  if (tempDir) rmSync(tempDir, { recursive: true, force: true });
+  tempDir = undefined;
 });
 
-function fixture(name: string): unknown {
-  return JSON.parse(readFileSync(join(fixtureDir, name), "utf8")) as unknown;
-}
-
-describe("Antigravity usage parsing", () => {
-  it("normalizes groups and buckets while ignoring turn metadata", () => {
-    const result = normalizeAgyUsage(fixture("usage-json.json"));
+describe("Antigravity quota parsing", () => {
+  it("normalizes quota summary groups into session and weekly windows", () => {
+    const result = normalizeAgyQuotaSummary(fixture("quota-summary.json"));
 
     expect(result?.windows).toMatchObject([
       {
-        id: "gemini-weekly",
-        label: "Gemini Models: Weekly Limit Remaining",
-        kind: "weekly",
-        percentRemaining: 99,
-        percentUsed: 1,
-        resetsAt: "2026-08-11T19:28:33.000Z",
-        windowSeconds: 604_800,
-      },
-      {
-        id: "gemini-5h",
-        label: "Gemini Models: Five Hour Limit Remaining",
+        id: "gemini_5h",
+        label: "Gemini 5-hour",
         kind: "session",
-        percentRemaining: 100,
-        percentUsed: 0,
-        resetsAt: "2026-08-09T15:01:48.000Z",
-        windowSeconds: 18_000,
+        percentUsed: 9,
+        percentRemaining: 91,
+        resetsAt: "2026-06-15T11:39:34.000Z",
       },
       {
-        id: "3p-weekly",
-        label: "Claude and GPT models: Weekly Limit Remaining",
+        id: "gemini_weekly",
+        label: "Gemini weekly",
         kind: "weekly",
-        percentRemaining: 97,
-        percentUsed: 3,
-        resetsAt: "2026-08-12T04:39:05.000Z",
-        windowSeconds: 604_800,
+        percentUsed: 18,
+        percentRemaining: 82,
+        resetsAt: "2026-06-19T08:45:39.000Z",
       },
       {
-        id: "3p-5h",
-        label: "Claude and GPT models: Five Hour Limit Remaining",
+        id: "claude_gpt_5h",
+        label: "Claude/GPT 5-hour",
         kind: "session",
-        percentRemaining: 100,
-        percentUsed: 0,
-        resetsAt: "2026-08-09T15:01:48.000Z",
-        windowSeconds: 18_000,
+        percentUsed: 27,
+        percentRemaining: 73,
+        resetsAt: "2026-06-15T12:52:10.000Z",
+      },
+      {
+        id: "claude_gpt_weekly",
+        label: "Claude/GPT weekly",
+        kind: "weekly",
+        percentUsed: 36,
+        percentRemaining: 64,
+        resetsAt: "2026-06-20T00:39:54.000Z",
       },
     ]);
-    expect(result?.untrustedWindowIds).toEqual([]);
-    expect(JSON.stringify(result)).not.toContain("conversation_id");
-    expect(JSON.stringify(result)).not.toContain("num_turns");
-    expect(JSON.stringify(result)).not.toContain("tokens");
+    expect(result?.windows.every((window) => !window.windowSeconds)).toBe(true);
   });
 
-  it("returns a fresh empty parse for a valid zero-group envelope", () => {
-    expect(normalizeAgyUsage(fixture("usage-empty.json"))).toEqual({
-      windows: [],
-      untrustedWindowIds: [],
-    });
-  });
-
-  it("fails closed for an incompatible groups envelope", () => {
-    expect(normalizeAgyUsage(fixture("usage-malformed.json"))).toBeUndefined();
-    expect(normalizeAgyUsage({ command: { data: {} } })).toBeUndefined();
-    expect(normalizeAgyUsage("not-json")).toBeUndefined();
-  });
-
-  it("fails closed for non-success status and unrelated command envelopes", () => {
-    const validData = {
-      groups: [],
-    };
-    expect(
-      normalizeAgyUsage({
-        status: "ERROR",
-        command: { name: "usage", data: validData },
-      }),
-    ).toBeUndefined();
-    expect(
-      normalizeAgyUsage({
-        status: "SUCCESS",
-        command: { name: "login", data: validData },
-      }),
-    ).toBeUndefined();
-  });
-
-  it("omits percentages for out-of-range fractions and marks fields untrusted", () => {
-    const result = normalizeAgyUsage({
-      status: "SUCCESS",
-      command: {
-        name: "usage",
-        data: {
-          groups: [
+  it("normalizes oneof remaining values", () => {
+    const result = normalizeAgyQuotaSummary({
+      groups: [
+        {
+          displayName: "Gemini Models",
+          buckets: [
             {
-              id: "consumer",
-              name: "Consumer",
-              buckets: [
-                {
-                  id: "over",
-                  name: "Over",
-                  window: "5h",
-                  remaining_fraction: 2,
-                  reset_time: "not-a-date",
-                },
-                {
-                  id: "missing",
-                  name: "Missing",
-                  window: "5h",
-                },
-              ],
+              bucketId: "gemini-weekly",
+              displayName: "Weekly Limit",
+              remaining: { case: "remainingFraction", value: 0.5 },
             },
           ],
         },
-      },
+      ],
     });
 
+    expect(result?.windows[0]).toMatchObject({
+      id: "gemini_weekly",
+      percentUsed: 50,
+      percentRemaining: 50,
+    });
+    expect(result?.windows[0]?.windowSeconds).toBeUndefined();
+  });
+
+  it("falls back to model windows from user status payloads", () => {
+    const result = normalizeAgyUserStatus(fixture("user-status.json"));
+
+    expect(result?.plan).toBe("Google AI Pro");
+    expect(result?.account?.email).toBe("person@example.invalid");
     expect(result?.windows).toMatchObject([
-      { id: "consumer/over" },
-      { id: "consumer/missing", kind: "session" },
-    ]);
-    expect(result?.windows[0]?.percentRemaining).toBeUndefined();
-    expect(result?.windows[0]?.percentUsed).toBeUndefined();
-    expect(result?.windows[0]?.resetsAt).toBeUndefined();
-    expect(result?.untrustedWindowIds).toEqual([
-      "consumer/over",
-      "consumer/missing",
-    ]);
-  });
-
-  it("suffixes duplicate bucket identities instead of overwriting them", () => {
-    const result = normalizeAgyUsage({
-      status: "SUCCESS",
-      command: {
-        name: "usage",
-        data: {
-          groups: [
-            {
-              id: "consumer",
-              name: "Consumer",
-              buckets: [
-                {
-                  id: "same",
-                  name: "One",
-                  window: "5h",
-                  remaining_fraction: 0.2,
-                  reset_time: "2026-08-09T12:00:00.000Z",
-                },
-                {
-                  id: "same",
-                  name: "Two",
-                  window: "5h",
-                  remaining_fraction: 0.3,
-                  reset_time: "2026-08-09T12:00:00.000Z",
-                },
-              ],
-            },
-          ],
-        },
-      },
-    });
-
-    expect(result?.windows.map(({ id }) => id)).toEqual([
-      "consumer/same",
-      "consumer/same_2",
-    ]);
-    expect(result?.untrustedWindowIds).toEqual(["consumer/same_2"]);
-  });
-
-  it("allocates globally unique IDs across raw suffixes and sanitized groups", () => {
-    const result = normalizeAgyUsage({
-      status: "SUCCESS",
-      command: {
-        name: "usage",
-        data: {
-          groups: [
-            {
-              id: "raw",
-              name: "Raw",
-              buckets: [
-                {
-                  id: "same_2",
-                  name: "Raw suffix",
-                  window: "5h",
-                  remaining_fraction: 0.2,
-                  reset_time: "2026-08-09T12:00:00.000Z",
-                },
-                {
-                  id: "same",
-                  name: "Collision with same_2",
-                  window: "5h",
-                  remaining_fraction: 0.5,
-                  reset_time: "2026-08-09T12:00:00.000Z",
-                },
-                {
-                  id: "same",
-                  name: "Second collision with same_2",
-                  window: "5h",
-                  remaining_fraction: 0.6,
-                  reset_time: "2026-08-09T12:00:00.000Z",
-                },
-              ],
-            },
-            {
-              id: "same/group",
-              name: "First sanitized group",
-              buckets: [
-                {
-                  id: "bucket",
-                  name: "First",
-                  window: "5h",
-                  remaining_fraction: 0.3,
-                  reset_time: "2026-08-09T12:00:00.000Z",
-                },
-              ],
-            },
-            {
-              id: "same-group",
-              name: "Second sanitized group",
-              buckets: [
-                {
-                  id: "bucket",
-                  name: "Second",
-                  window: "5h",
-                  remaining_fraction: 0.4,
-                  reset_time: "2026-08-09T12:00:00.000Z",
-                },
-              ],
-            },
-          ],
-        },
-      },
-    });
-
-    expect(result?.windows.map(({ id }) => id)).toEqual([
-      "raw/same_2",
-      "raw/same",
-      "raw/same_3",
-      "same-group/bucket",
-      "same-group/bucket_2",
-    ]);
-    expect(new Set(result?.windows.map(({ id }) => id)).size).toBe(5);
-    expect(result?.untrustedWindowIds).toEqual([
-      "raw/same_3",
-      "same-group/bucket",
-      "same-group/bucket_2",
-    ]);
-  });
-
-  it("marks missing and sanitized identities untrusted", () => {
-    const cases = [
       {
-        name: "separator",
-        group: "consumer",
-        bucket: "bad/id",
-        expected: "consumer/bad-id",
+        id: "model:model_fixture_gemini_flash",
+        label: "Gemini 3.5 Flash (Medium)",
+        kind: "model",
+        percentRemaining: 100,
       },
       {
-        name: "unicode and control",
-        group: "consumer",
-        bucket: "bad☃\u0001id",
-        expected: "consumer/bad-id",
+        id: "model:model_fixture_claude_sonnet",
+        label: "Claude Sonnet Fixture",
+        kind: "model",
+        percentRemaining: 50,
       },
-      {
-        name: "truncated",
-        group: "consumer",
-        bucket: "x".repeat(121),
-        expected: `consumer/${"x".repeat(120)}`,
-      },
-      {
-        name: "missing group",
-        group: undefined,
-        bucket: "bucket",
-        expected: "bucket",
-      },
-      {
-        name: "non-colliding sanitized group",
-        group: "preview/id",
-        bucket: "bucket",
-        expected: "preview-id/bucket",
-      },
-    ];
-
-    for (const testCase of cases) {
-      const result = normalizeAgyUsage({
-        status: "SUCCESS",
-        command: {
-          name: "usage",
-          data: {
-            groups: [
-              {
-                ...(testCase.group === undefined ? {} : { id: testCase.group }),
-                buckets: [
-                  {
-                    id: testCase.bucket,
-                    window: "5h",
-                    remaining_fraction: 0.5,
-                    reset_time: "2026-08-09T12:00:00.000Z",
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      });
-
-      expect(result?.windows[0]?.id, testCase.name).toBe(testCase.expected);
-      expect(result?.untrustedWindowIds, testCase.name).toEqual([
-        testCase.expected,
-      ]);
-    }
-  });
-
-  it("recognizes only observed Antigravity period strings", () => {
-    const periods = [
-      ["5h", "session", 18_000],
-      ["weekly", "weekly", 604_800],
-      ["five_hour", "unknown", undefined],
-      ["seven_day", "unknown", undefined],
-      ["session", "unknown", undefined],
-      ["7d", "unknown", undefined],
-      ["week", "unknown", undefined],
-      ["monthly", "unknown", undefined],
-      ["30d", "unknown", undefined],
-      ["model", "unknown", undefined],
-      ["credits", "unknown", undefined],
-      ["FIVE_HOUR", "unknown", undefined],
-    ] as const;
-
-    for (const [rawPeriod, kind, windowSeconds] of periods) {
-      const id = `period-${rawPeriod}`;
-      const result = normalizeAgyUsage({
-        status: "SUCCESS",
-        command: {
-          name: "usage",
-          data: {
-            groups: [
-              {
-                id: "consumer",
-                buckets: [
-                  {
-                    id,
-                    window: rawPeriod,
-                    remaining_fraction: 0.5,
-                    reset_time: "2026-08-09T12:00:00.000Z",
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      });
-
-      expect(result?.windows[0]?.kind, rawPeriod).toBe(kind);
-      expect(result?.windows[0]?.windowSeconds, rawPeriod).toBe(windowSeconds);
-      if (kind === "unknown")
-        expect(result?.untrustedWindowIds, rawPeriod).toContain(
-          `consumer/${id}`,
-        );
-    }
-  });
-
-  it("preserves real auth context while isolating child cwd and XDG storage", async () => {
-    const record = join(tempDir(), "record.json");
-    process.env.OPENAI_API_KEY = "parent-secret-must-not-reach-agy";
-    process.env.DBUS_SESSION_BUS_ADDRESS = "unix:path=/tmp/quota-axi-test-bus";
-    const executable = fakeExecutable(
-      `
-const fs = await import("node:fs");
-fs.writeFileSync(process.env.AGY_RECORD, JSON.stringify({
-  argv: process.argv.slice(2), cwd: process.cwd(), home: process.env.HOME,
-  config: process.env.XDG_CONFIG_HOME, cache: process.env.XDG_CACHE_HOME,
-  state: process.env.XDG_STATE_HOME,
-  dirs: [process.env.HOME, process.env.XDG_CONFIG_HOME, process.env.XDG_CACHE_HOME, process.env.XDG_STATE_HOME].map((path) => fs.existsSync(path)),
-  sessionBus: process.env.DBUS_SESSION_BUS_ADDRESS,
-  leaked: { openai: process.env.OPENAI_API_KEY, github: process.env.GITHUB_TOKEN },
-}));
-process.stdout.write(JSON.stringify(${JSON.stringify(fixture("usage-empty.json"))}));
-`,
-      { AGY_RECORD: record },
-    );
-    const observed: {
-      command: string;
-      args: string[];
-      options?: SpawnOptions;
-    }[] = [];
-    const result = await runAgyCommand({
-      executablePath: executable,
-      spawnImpl: ((command, args, options) => {
-        observed.push({ command, args, options });
-        return portableSpawn(command, args, options);
-      }) as typeof realSpawn,
-    });
-
-    expect(JSON.parse(result.stdout)).toEqual(fixture("usage-empty.json"));
-    expect(observed).toHaveLength(1);
-    expect(observed[0]?.command).toBe(executable);
-    expect(observed[0]?.args).toEqual([
-      "-p",
-      "/usage",
-      "--output-format",
-      "json",
     ]);
-    expect(observed[0]?.options?.shell).toBe(false);
-    expect(observed[0]?.options?.stdio).toEqual(["ignore", "pipe", "pipe"]);
-    const seen = JSON.parse(readFileSync(record, "utf8")) as {
-      argv: string[];
-      cwd: string;
-      home: string;
-      config: string;
-      cache: string;
-      state: string;
-      dirs: boolean[];
-      sessionBus?: string;
-      leaked: Record<string, string>;
-    };
-    expect(seen.argv).toEqual(["-p", "/usage", "--output-format", "json"]);
-    expect(seen.cwd).toContain("quota-axi-agy-");
-    expect(seen.home).toBe(process.env.HOME);
-    for (const key of ["cwd", "config", "cache", "state"] as const) {
-      const path = String(seen[key]);
-      expect(path).toContain("quota-axi-agy-");
-      expect(path).not.toContain(process.cwd());
-    }
-    expect(seen.dirs).toEqual([true, true, true, true]);
-    expect(seen.sessionBus).toBe("unix:path=/tmp/quota-axi-test-bus");
-    expect(seen.leaked).toEqual({});
-    expect(existsSync(String(seen.cwd))).toBe(false);
-    expect(existsSync(String(seen.config))).toBe(false);
-    expect(existsSync(String(seen.cache))).toBe(false);
-    expect(existsSync(String(seen.state))).toBe(false);
   });
 
-  it("falls back through current-user home sources when HOME is absent or empty", async () => {
-    const record = join(tempDir(), "home.json");
-    const executable = fakeExecutable(
-      `
-const fs = await import("node:fs");
-fs.writeFileSync(process.env.AGY_RECORD, JSON.stringify(process.env.HOME));
-process.stdout.write(JSON.stringify(${JSON.stringify(fixture("usage-empty.json"))}));
-`,
-      { AGY_RECORD: record },
-    );
+  it("parses Antigravity processes and listening ports without matching prompt text", () => {
+    const processes = processInfosFromPs(`
+      101 /Users/test/.local/bin/agy
+      102 /Applications/Google Antigravity.app/Contents/Resources/bin/language-server --csrf_token token --extension_server_port 64123
+      103 /usr/bin/node /opt/antigravity-cli/mcp-server.cjs --port 64124
+      104 codex --prompt "antigravity-cli mcp-server.cjs language_server"
+      105 /usr/bin/node /opt/runner.cjs --prompt "/opt/antigravity-cli/mcp-server.cjs"
+      106 /usr/bin/codex --prompt "/Applications/Antigravity.app/Contents/bin/language_server --csrf_token fake"
+    `);
 
-    process.env.HOME = "";
-    process.env.USERPROFILE = join(tempDir(), "profile");
-    await runFakeAgyCommand({ executablePath: executable });
-    expect(JSON.parse(readFileSync(record, "utf8"))).toBe(
-      process.env.USERPROFILE,
-    );
-
-    delete process.env.HOME;
-    delete process.env.USERPROFILE;
-    await runFakeAgyCommand({ executablePath: executable });
-    expect(JSON.parse(readFileSync(record, "utf8"))).toBe(homedir());
+    expect(processes).toMatchObject([
+      { pid: 101, source: "agy" },
+      {
+        pid: 102,
+        source: "app",
+        csrfToken: "token",
+        extensionPort: 64123,
+      },
+      { pid: 103, source: "agy" },
+    ]);
+    expect(
+      portsFromLsof(`
+COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+agy 101 test 8u IPv4 0x1 0t0 TCP 127.0.0.1:64440 (LISTEN)
+agy 101 test 9u IPv4 0x2 0t0 TCP 127.0.0.1:64441 (LISTEN)
+`),
+    ).toEqual([64440, 64441]);
   });
+});
 
-  it("classifies auth stderr without exposing it and never reads credentials", async () => {
-    const sentinel = "AUTH-SECRET-SHOULD-NOT-ESCAPE";
-    const executable = fakeExecutable(
-      `process.stderr.write(${JSON.stringify(`sign in required ${sentinel}`)}); process.exit(7);`,
-    );
-    process.env[AGY_BINARY_ENV] = executable;
-
-    const result = await fetchFakeQuota(executable);
-    expect(result.state.status).toBe("auth_required");
-    expect(result.state.error).toBe("agy_auth_required");
-    expect(JSON.stringify(result)).not.toContain(sentinel);
-    const auth = await inspectAuth(
-      { allowKeychainPrompt: false },
-      { executablePath: executable },
-    );
-    expect(auth.sources[0]).toMatchObject({
-      source: "cli-print",
-      status: "available",
-    });
-    expect(JSON.stringify(auth)).not.toContain("SECRET");
-  });
-
-  it("terminates a hanging child at the deadline and removes its root", async () => {
-    const executable = fakeExecutable("setTimeout(() => {}, 1000);");
-    await expect(
-      runFakeAgyCommand({ executablePath: executable, timeoutMs: 25 }),
-    ).rejects.toMatchObject({ message: "agy_process_timeout" });
-  });
-
-  it("waits for a stubborn child to exit before cleanup and returning", async () => {
-    const record = join(tempDir(), "stubborn.json");
-    const executable = fakeExecutable(
-      `
-const fs = await import("node:fs");
-fs.writeFileSync(process.env.AGY_RECORD, JSON.stringify({ cwd: process.cwd(), pid: process.pid }));
-process.on("SIGTERM", () => {});
-setInterval(() => {}, 1000);
-`,
-      { AGY_RECORD: record },
-    );
-    const started = Date.now();
-    await expect(
-      runFakeAgyCommand({ executablePath: executable, timeoutMs: 1_000 }),
-    ).rejects.toMatchObject({ message: "agy_process_timeout" });
-    const elapsed = Date.now() - started;
-    const seen = JSON.parse(readFileSync(record, "utf8")) as {
-      cwd: string;
-      pid: number;
-    };
-    expect(elapsed).toBeGreaterThanOrEqual(
-      process.platform === "win32" ? 1_000 : 1_500,
-    );
-    expect(existsSync(seen.cwd)).toBe(false);
-    if (process.platform !== "win32")
-      expect(() => process.kill(seen.pid, 0)).toThrow();
-  });
-
-  it("rejects oversized output without retaining the payload", async () => {
-    const executable = fakeExecutable(
-      "process.stdout.write('X'.repeat(10000));",
-    );
-    await expect(
-      runFakeAgyCommand({ executablePath: executable, maxOutputBytes: 64 }),
-    ).rejects.toMatchObject({ message: "agy_output_too_large" });
-  });
-
-  it("counts UTF-8 stdout bytes rather than JavaScript string length", async () => {
-    const executable = fakeExecutable("process.stdout.write('€'.repeat(2));");
-    await expect(
-      runFakeAgyCommand({ executablePath: executable, maxOutputBytes: 4 }),
-    ).rejects.toMatchObject({ message: "agy_output_too_large" });
-  });
-
-  it("counts UTF-8 stderr bytes rather than JavaScript string length", async () => {
-    const executable = fakeExecutable(
-      "process.stderr.write('€'.repeat(2)); process.exit(7);",
-    );
-    await expect(
-      runFakeAgyCommand({ executablePath: executable, maxOutputBytes: 4 }),
-    ).rejects.toMatchObject({ message: "agy_output_too_large" });
-  });
-
-  it("preserves split UTF-8 stdout and enforces raw byte boundaries", async () => {
-    const payload = JSON.stringify({
-      status: "SUCCESS",
-      command: {
-        name: "usage",
-        data: {
-          groups: [
-            {
-              id: "consumer",
-              name: "Label é € 𐍈",
-              buckets: [],
-            },
-          ],
-        },
+describe("Antigravity provider", () => {
+  it("fetches quota from an already-running loopback endpoint and merges identity", async () => {
+    const runtime = runtimeWith({
+      ps: "123 /Users/test/.local/bin/agy\n",
+      lsof: lsofFor(123, 64440),
+      responses: {
+        "https:64440:/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary":
+          fixture("quota-summary.json"),
+        "https:64440:/exa.language_server_pb.LanguageServerService/GetUserStatus":
+          fixture("user-status.json"),
       },
     });
-    const bytes = Buffer.byteLength(payload, "utf8");
-    const executable = fakeExecutable(
-      `(async () => { const bytes = Buffer.from(${JSON.stringify(payload)}); for (const byte of bytes) { process.stdout.write(Buffer.from([byte])); await new Promise((resolve) => setImmediate(resolve)); } })();`,
-    );
 
-    const result = await runFakeAgyCommand({
-      executablePath: executable,
-      maxOutputBytes: bytes,
-    });
-    expect(JSON.parse(result.stdout).command.data.groups[0].name).toBe(
-      "Label é € 𐍈",
-    );
-    await expect(
-      runFakeAgyCommand({
-        executablePath: executable,
-        maxOutputBytes: bytes - 1,
-      }),
-    ).rejects.toMatchObject({ message: "agy_output_too_large" });
-  });
+    const result = await fetchQuotaWithRuntime(runtime);
 
-  it("preserves split UTF-8 stderr and enforces raw byte boundaries", async () => {
-    const message = "diagnostic é € 𐍈";
-    const bytes = Buffer.byteLength(message, "utf8");
-    const executable = fakeExecutable(
-      `(async () => { const bytes = Buffer.from(${JSON.stringify(message)}); for (const byte of bytes) { process.stderr.write(Buffer.from([byte])); await new Promise((resolve) => setImmediate(resolve)); } process.exit(7); })();`,
-    );
-
-    await expect(
-      runFakeAgyCommand({ executablePath: executable, maxOutputBytes: bytes }),
-    ).rejects.toMatchObject({ message: "agy_process_failed" });
-    await expect(
-      runFakeAgyCommand({
-        executablePath: executable,
-        maxOutputBytes: bytes - 1,
-      }),
-    ).rejects.toMatchObject({ message: "agy_output_too_large" });
-  });
-
-  it("maps malformed JSON to a bounded provider error", async () => {
-    const executable = fakeExecutable("process.stdout.write('{not-json');");
-    process.env[AGY_BINARY_ENV] = executable;
-    const result = await fetchFakeQuota(executable);
-    expect(result.state.status).toBe("error");
-    expect(result.state.error).toBe("agy_output_invalid");
-    expect(JSON.stringify(result)).not.toContain("not-json");
-  });
-
-  it("returns a fresh normalized provider report from the official command output", async () => {
-    const executable = fakeExecutable(
-      `process.stdout.write(JSON.stringify(${JSON.stringify(fixture("usage-json.json"))}));`,
-    );
-    const result = await fetchFakeQuota(executable);
-    expect(result).toMatchObject({
-      provider: "antigravity",
-      label: "Antigravity",
-      source: "cli-print",
-      state: {
-        status: "fresh",
-        stale: false,
-        sourcesTried: ["cli-print"],
-      },
-    });
-    expect(result.windows).toHaveLength(4);
-    expect(result.state.untrustedWindowIds).toBeUndefined();
-    expect(JSON.stringify(result)).not.toContain("conversation_id");
-  });
-
-  it("returns a fresh empty provider report for a valid empty envelope", async () => {
-    const executable = fakeExecutable(
-      `process.stdout.write(JSON.stringify(${JSON.stringify(fixture("usage-empty.json"))}));`,
-    );
-    const result = await fetchFakeQuota(executable);
     expect(result.state.status).toBe("fresh");
-    expect(result.windows).toEqual([]);
+    expect(result.source).toBe("cli-rpc");
+    expect(result.plan).toBe("Google AI Pro");
+    expect(result.account?.email).toBe("person@example.invalid");
+    expect(result.windows.map((window) => window.id)).toEqual([
+      "gemini_5h",
+      "gemini_weekly",
+      "claude_gpt_5h",
+      "claude_gpt_weekly",
+    ]);
   });
 
-  it("uses a normalized cached snapshot only for transient child failures", async () => {
-    const cacheRoot = tempDir();
-    process.env.XDG_CACHE_HOME = cacheRoot;
-    writeCachedProviders([cachedAgy()]);
-    const executable = fakeExecutable(
-      "process.stderr.write('temporary failure'); process.exit(7);",
+  it("probes app language-server endpoints with CSRF before quota requests", async () => {
+    const calls: Array<{ endpoint: AgyConnectionEndpoint; path: string }> = [];
+    const result = await fetchQuotaWithRuntime(
+      runtimeWith({
+        ps: "123 /Applications/Google Antigravity.app/Contents/Resources/bin/language-server --csrf_token token --extension_server_port 64123 --extension_server_csrf_token extension-token\n",
+        lsof: lsofFor(123, 64440),
+        responses: {
+          "https:64440:/exa.language_server_pb.LanguageServerService/GetUnleashData":
+            {},
+          "https:64440:/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary":
+            fixture("quota-summary.json"),
+        },
+        onRequest(endpoint, path) {
+          calls.push({ endpoint, path });
+        },
+      }),
     );
 
-    const result = await fetchFakeQuota(executable);
+    expect(result.state.status).toBe("fresh");
+    expect(calls[0]?.path).toBe(
+      "/exa.language_server_pb.LanguageServerService/GetUnleashData",
+    );
+    expect(calls[0]?.endpoint).toMatchObject({
+      csrfToken: "token",
+      requiresCsrfToken: true,
+      requiresUnleashProbe: true,
+    });
+    expect(calls.every((call) => call.endpoint.port !== 64123)).toBe(true);
+  });
+
+  it("uses an extension port only when the app process owns its listener", async () => {
+    const calls: AgyConnectionEndpoint[] = [];
+    const result = await fetchQuotaWithRuntime(
+      runtimeWith({
+        ps: "123 /Applications/Google Antigravity.app/Contents/Resources/bin/language-server --csrf_token main-token --extension_server_port 64123 --extension_server_csrf_token extension-token\n",
+        lsof: `${lsofFor(123, 64440)}agy 123 test 9u IPv4 0x2 0t0 TCP 127.0.0.1:64123 (LISTEN)\n`,
+        requestJson: async (endpoint, path) => {
+          calls.push(endpoint);
+          if (
+            endpoint.port === 64123 &&
+            endpoint.csrfToken === "extension-token"
+          ) {
+            if (path.endsWith("GetUnleashData")) return {};
+            if (path.endsWith("RetrieveUserQuotaSummary"))
+              return fixture("quota-summary.json");
+          }
+          throw new Error("connect ECONNREFUSED");
+        },
+      }),
+    );
+
+    expect(result.state.status).toBe("fresh");
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        port: 64123,
+        csrfToken: "extension-token",
+      }),
+    );
+  });
+
+  it("reports unavailable without trying HTTP when Antigravity is not running", async () => {
+    const requestJson = vi.fn();
+    const result = await fetchQuotaWithRuntime(
+      runtimeWith({ ps: "", lsof: "", requestJson }),
+    );
+
+    expect(result.state.status).toBe("unavailable");
+    expect(result.state.error).toBe("Antigravity/agy is not running");
+    expect(requestJson).not.toHaveBeenCalled();
+  });
+
+  it("reports unavailable when discovered loopback endpoints are absent", async () => {
+    const result = await fetchQuotaWithRuntime(
+      runtimeWith({
+        ps: "123 /Users/test/.local/bin/agy\n",
+        lsof: lsofFor(123, 64440),
+        requestJson: async () => {
+          throw new Error("connect ECONNREFUSED 127.0.0.1:64440");
+        },
+      }),
+    );
+
+    expect(result.state.status).toBe("unavailable");
+    expect(result.state.error).toBe("connect ECONNREFUSED 127.0.0.1:64440");
+  });
+
+  it("preserves sanitized process and port discovery failures", async () => {
+    const processResult = await fetchQuotaWithRuntime(
+      runtimeWith({ psError: new Error("ps failed at /Users/private") }),
+    );
+    const portResult = await fetchQuotaWithRuntime(
+      runtimeWith({
+        ps: "123 /Users/test/.local/bin/agy\n",
+        lsofError: new Error("lsof denied for private-host"),
+      }),
+    );
+
+    expect(processResult.state).toMatchObject({
+      status: "error",
+      error: "Antigravity process discovery failed",
+    });
+    expect(portResult.state).toMatchObject({
+      status: "error",
+      error: "Antigravity port discovery failed",
+    });
+  });
+
+  it("preserves sanitized discovery failures during auth inspection", async () => {
+    const processResult = await inspectAuthWithRuntime(
+      runtimeWith({ psError: new Error("ps failed at /Users/private") }),
+    );
+    const portResult = await inspectAuthWithRuntime(
+      runtimeWith({
+        ps: "123 /Users/test/.local/bin/agy\n",
+        lsofError: new Error("lsof denied for private-host"),
+      }),
+    );
+
+    expect(processResult.sources).toEqual([
+      {
+        source: "loopback",
+        status: "error",
+        error: "Antigravity process discovery failed",
+      },
+    ]);
+    expect(portResult.sources).toEqual([
+      {
+        source: "loopback",
+        status: "error",
+        error: "Antigravity port discovery failed",
+      },
+    ]);
+  });
+
+  it("continues discovery when another verified process has listening ports", async () => {
+    const result = await fetchQuotaWithRuntime(
+      runtimeWith({
+        ps: "123 /Users/test/.local/bin/agy\n124 /Users/test/.local/bin/agy\n",
+        lsofByPid: {
+          123: new Error("permission denied"),
+          124: lsofFor(124, 64441),
+        },
+        responses: {
+          "https:64441:/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary":
+            fixture("quota-summary.json"),
+        },
+      }),
+    );
+
+    expect(result.state.status).toBe("fresh");
+  });
+
+  it("falls back to model quotas when quota summary has no usable buckets", async () => {
+    const result = await fetchQuotaWithRuntime(
+      runtimeWith({
+        ps: "123 /Users/test/.local/bin/agy\n",
+        lsof: lsofFor(123, 64440),
+        responses: {
+          "https:64440:/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary":
+            { response: { groups: [] } },
+          "https:64440:/exa.language_server_pb.LanguageServerService/GetUserStatus":
+            fixture("user-status.json"),
+        },
+      }),
+    );
+
+    expect(result.state.status).toBe("fresh");
+    expect(result.windows.map((window) => window.id)).toEqual([
+      "model:model_fixture_gemini_flash",
+      "model:model_fixture_claude_sonnet",
+    ]);
+  });
+
+  it("continues past a malformed endpoint to a later valid port", async () => {
+    const result = await fetchQuotaWithRuntime(
+      runtimeWith({
+        ps: "123 /Users/test/.local/bin/agy\n",
+        lsof: `${lsofFor(123, 64440)}agy 123 test 9u IPv4 0x2 0t0 TCP 127.0.0.1:64441 (LISTEN)\n`,
+        responses: {
+          "https:64440:/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary":
+            { response: { groups: [] } },
+          "https:64440:/exa.language_server_pb.LanguageServerService/GetUserStatus":
+            { response: { groups: [] } },
+          "https:64440:/exa.language_server_pb.LanguageServerService/GetCommandModelConfigs":
+            { response: { groups: [] } },
+          "https:64441:/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary":
+            fixture("quota-summary.json"),
+        },
+      }),
+    );
+
+    expect(result.state.status).toBe("fresh");
+    expect(result.windows[0]?.id).toBe("gemini_5h");
+  });
+
+  it("bounds probing across all discovered endpoints", async () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    const resultPromise = fetchQuotaWithRuntime(
+      runtimeWith({
+        ps: "123 /Users/test/.local/bin/agy\n",
+        lsof: `${lsofFor(123, 64440)}agy 123 test 9u IPv4 0x2 0t0 TCP 127.0.0.1:64441 (LISTEN)\n`,
+        requestJson: async (endpoint, path) => {
+          calls.push(`${endpoint.scheme}:${endpoint.port}:${path}`);
+          return new Promise<never>(() => undefined);
+        },
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    const result = await resultPromise;
+
+    expect(result.state.status).toBe("unavailable");
+    expect(result.state.error).toBe("Antigravity probe timed out");
+    expect(calls).toHaveLength(4);
+    vi.useRealTimers();
+  });
+
+  it("reports malformed loopback responses as errors", async () => {
+    const result = await fetchQuotaWithRuntime(
+      runtimeWith({
+        ps: "123 /Users/test/.local/bin/agy\n",
+        lsof: lsofFor(123, 64440),
+        responses: {
+          "https:64440:/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary":
+            { response: { groups: [] } },
+          "https:64440:/exa.language_server_pb.LanguageServerService/GetUserStatus":
+            { response: { groups: [] } },
+          "https:64440:/exa.language_server_pb.LanguageServerService/GetCommandModelConfigs":
+            { response: { groups: [] } },
+          "http:64440:/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary":
+            { response: { groups: [] } },
+          "http:64440:/exa.language_server_pb.LanguageServerService/GetUserStatus":
+            { response: { groups: [] } },
+          "http:64440:/exa.language_server_pb.LanguageServerService/GetCommandModelConfigs":
+            { response: { groups: [] } },
+        },
+      }),
+    );
+
+    expect(result.state.status).toBe("error");
+    expect(result.state.error).toBe("Antigravity quota summary malformed");
+  });
+
+  it("uses stale cache when the live loopback source is unavailable", async () => {
+    writeCachedProviders([cachedAgyQuota()]);
+
+    const result = await fetchQuotaWithRuntime(runtimeWith({ ps: "" }));
+
     expect(result.state.status).toBe("stale");
     expect(result.source).toBe("cache");
-    expect(result.windows[0]?.percentRemaining).toBe(75);
+    expect(result.windows[0]).toMatchObject({
+      id: "gemini_5h",
+      percentRemaining: 88,
+    });
   });
 
-  it("retires a cached snapshot for definitive malformed output", async () => {
-    const cacheRoot = tempDir();
-    process.env.XDG_CACHE_HOME = cacheRoot;
-    writeCachedProviders([cachedAgy()]);
-    const executable = fakeExecutable("process.stdout.write('{bad');");
+  it("preserves authentication failures and retires stale cache", async () => {
+    writeCachedProviders([cachedAgyQuota()]);
+    const port = await startServer((_response) => {
+      _response.writeHead(401, { "content-type": "application/json" });
+      _response.end(JSON.stringify({ error: "secret-account@example.test" }));
+    });
 
-    const result = await fetchFakeQuota(executable);
-    expect(result.state.status).toBe("error");
-    expect(readCachedProvider("antigravity")).toBeUndefined();
-  });
-
-  it("retires a cached snapshot for oversized untrusted output", async () => {
-    const cacheRoot = tempDir();
-    process.env.XDG_CACHE_HOME = cacheRoot;
-    writeCachedProviders([cachedAgy()]);
-    const executable = fakeExecutable(
-      "process.stdout.write('X'.repeat(1_100_000));",
+    const result = await fetchQuotaWithRuntime(
+      runtimeWith({
+        ps: "123 /Users/test/.local/bin/agy\n",
+        lsof: lsofFor(123, port),
+        requestJson: requestLoopbackJson,
+      }),
     );
 
-    const result = await fetchFakeQuota(executable);
-    expect(result.state.status).toBe("error");
-    expect(result.state.error).toBe("agy_output_too_large");
-    expect(readCachedProvider("antigravity")).toBeUndefined();
+    expect(result.state).toMatchObject({
+      status: "auth_required",
+      error: "Antigravity sign-in required",
+    });
+    expect(JSON.stringify(result)).not.toContain("secret-account");
+    expect(readCachedProvider("agy")).toBeUndefined();
+  });
+
+  it("preserves rate limits over protocol failures", async () => {
+    const port = await startServer((response) => {
+      response.writeHead(429, { "content-type": "application/json" });
+      response.end(JSON.stringify({ message: "private diagnostic" }));
+    });
+
+    const result = await fetchQuotaWithRuntime(
+      runtimeWith({
+        ps: "123 /Users/test/.local/bin/agy\n",
+        lsof: lsofFor(123, port),
+        requestJson: requestLoopbackJson,
+      }),
+    );
+
+    expect(result.state).toMatchObject({
+      status: "rate_limited",
+      error: "Antigravity quota endpoint rate limited",
+    });
+    expect(JSON.stringify(result)).not.toContain("private diagnostic");
+  });
+
+  it("terminates trickling and oversized loopback responses", async () => {
+    const tricklePort = await startServer((response) => {
+      const interval = setInterval(() => response.write(" "), 5);
+      response.on("close", () => clearInterval(interval));
+    });
+    const trickleRequest = requestLoopbackJson(
+      endpointAt(tricklePort),
+      "/quota",
+      50,
+    );
+
+    await expect(trickleRequest).rejects.toThrow(
+      "Antigravity loopback timed out",
+    );
+
+    const oversizedPort = await startServer((response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(`"${"x".repeat(1024 * 1024)}"`);
+    });
+
+    await expect(
+      requestLoopbackJson(endpointAt(oversizedPort), "/quota", 1_000),
+    ).rejects.toThrow("Antigravity loopback response too large");
+  });
+
+  it("does not launch agy or any provider process", async () => {
+    const commands: Array<{ command: string; args: string[] }> = [];
+    const runtime = runtimeWith({
+      ps: "123 /Users/test/.local/bin/agy\n",
+      lsof: lsofFor(123, 64440),
+      responses: {
+        "https:64440:/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary":
+          fixture("quota-summary.json"),
+      },
+      onExec(command, args) {
+        commands.push({ command, args });
+      },
+    });
+
+    const result = await fetchQuotaWithRuntime(runtime);
+
+    expect(result.state.status).toBe("fresh");
+    expect(commands).toEqual([
+      {
+        command: "ps",
+        args: ["-x", "-u", String(process.geteuid()), "-o", "pid=,command="],
+      },
+      {
+        command: "lsof",
+        args: ["-nP", "-a", "-p", "123", "-iTCP", "-sTCP:LISTEN"],
+      },
+    ]);
+    expect(commands.map((call) => call.command)).not.toContain("agy");
   });
 });
 
-function tempDir(): string {
-  tempRoot = mkdtempSync(join(tmpdir(), "quota-axi-agy-test-"));
-  return tempRoot;
-}
-
-function fakeExecutable(
-  body: string,
-  env: Record<string, string> = {},
-): string {
-  const root = tempRoot ?? tempDir();
-  const file = join(
-    root,
-    `fake-agy-${Math.random().toString(16).slice(2)}.mjs`,
-  );
-  writeFileSync(
-    file,
-    `${Object.entries(env)
-      .map(([key, value]) => `process.env.${key} = ${JSON.stringify(value)};`)
-      .join("\n")}\n${body}\n`,
-  );
-  return file;
-}
-
-function fetchFakeQuota(executablePath: string) {
-  return fetchQuota(
-    { allowKeychainPrompt: false },
-    { executablePath, spawnImpl: portableSpawn },
-  );
-}
-
-function runFakeAgyCommand(options: Parameters<typeof runAgyCommand>[0]) {
-  return runAgyCommand({ ...options, spawnImpl: portableSpawn });
-}
-
-function portableSpawn(
-  command: string,
-  args: readonly string[],
-  options: SpawnOptions,
-) {
-  if (command.endsWith(".mjs"))
-    return realSpawn(process.execPath, [command, ...args], options);
-  return realSpawn(command, args, options);
-}
-
-function cachedAgy(): ProviderQuota {
+function runtimeWith(options: {
+  ps?: string;
+  lsof?: string;
+  psError?: Error;
+  lsofError?: Error;
+  lsofByPid?: Record<number, string | Error>;
+  requestJson?: AgyProbeRuntime["requestJson"];
+  responses?: Record<string, unknown>;
+  onExec?: (command: string, args: string[]) => void;
+  onRequest?: (endpoint: AgyConnectionEndpoint, path: string) => void;
+}): AgyProbeRuntime {
   return {
-    provider: "antigravity",
+    async execFileText(command, args) {
+      options.onExec?.(command, args);
+      if (command === "ps") {
+        if (options.psError) throw options.psError;
+        return options.ps ?? "";
+      }
+      if (command === "lsof") {
+        if (options.lsofError) throw options.lsofError;
+        const pid = Number(args[args.indexOf("-p") + 1]);
+        const output = options.lsofByPid?.[pid];
+        if (output instanceof Error) throw output;
+        return output ?? options.lsof ?? "";
+      }
+      throw new Error(`unexpected command: ${command}`);
+    },
+    async requestJson(
+      endpoint: AgyConnectionEndpoint,
+      path: string,
+      timeoutMs: number,
+    ) {
+      options.onRequest?.(endpoint, path);
+      if (options.requestJson)
+        return options.requestJson(endpoint, path, timeoutMs);
+      const key = `${endpoint.scheme}:${endpoint.port}:${path}`;
+      if (options.responses && key in options.responses)
+        return options.responses[key];
+      throw new Error(`unexpected request: ${key}`);
+    },
+  };
+}
+
+function fixture(name: string): unknown {
+  return JSON.parse(
+    readFileSync(join("test", "fixtures", "agy", name), "utf8"),
+  ) as unknown;
+}
+
+function lsofFor(pid: number, port: number): string {
+  return `COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+agy ${pid} test 8u IPv4 0x1 0t0 TCP 127.0.0.1:${port} (LISTEN)
+`;
+}
+
+async function startServer(
+  handler: (response: ServerResponse) => void,
+): Promise<number> {
+  const server = createServer((_request, response) => handler(response));
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return (server.address() as AddressInfo).port;
+}
+
+function endpointAt(port: number): AgyConnectionEndpoint {
+  return {
+    scheme: "http",
+    port,
+    source: "agy",
+    pid: process.pid,
+    requiresCsrfToken: false,
+    requiresUnleashProbe: false,
+  };
+}
+
+function useTempCache(): void {
+  tempDir = mkdtempSync(join(tmpdir(), "quota-axi-agy-cache-"));
+  process.env.XDG_CACHE_HOME = tempDir;
+}
+
+function cachedAgyQuota(): ProviderQuota {
+  return {
+    provider: "agy",
     label: "Antigravity",
-    source: "cli-print",
+    source: "cli-rpc",
     windows: [
       {
-        id: "consumer/session",
-        label: "Consumer: Session",
+        id: "gemini_5h",
+        label: "Gemini 5-hour",
         kind: "session",
-        percentRemaining: 75,
-        percentUsed: 25,
+        percentUsed: 12,
+        percentRemaining: 88,
       },
     ],
     state: {
       status: "fresh",
       stale: false,
-      refreshedAt: "2026-08-09T08:00:00.000Z",
-      sourcesTried: ["cli-print"],
+      refreshedAt: "2026-06-15T11:39:34.000Z",
+      sourcesTried: ["loopback"],
     },
   };
 }

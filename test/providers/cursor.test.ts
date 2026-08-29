@@ -156,3 +156,120 @@ describe("Cursor monthly billing cycle", () => {
     ).toBe("unknown");
   });
 });
+
+describe("Cursor Grok Bot weekly usage", () => {
+  it("normalizes GetSandUsageStatus into a grok_bot weekly window", () => {
+    const result = normalizeCursorUsage(
+      {
+        billingCycleStart: "2026-07-19T21:37:33.000Z",
+        billingCycleEnd: "2026-08-19T21:37:33.000Z",
+        planUsage: { totalPercentUsed: 15.2, autoPercentUsed: 13.9 },
+      },
+      undefined,
+      undefined,
+      {
+        currentPeriodStart: "2026-08-19T21:37:33.239Z",
+        nextResetTimestampUtc: "2026-08-26T21:37:33.239Z",
+        usagePercent: 38.059383,
+        hasAvailableUsage: true,
+        hasNonZeroIncludedLimit: true,
+        grokPlanLabel: "Grok Bot Plan",
+      },
+    );
+
+    expect(result?.windows).toMatchObject([
+      {
+        id: "included_usage",
+        kind: "monthly",
+        percentUsed: 15,
+        startsAt: "2026-07-19T21:37:33.000Z",
+      },
+      {
+        id: "auto_usage",
+        kind: "monthly",
+        percentUsed: 14,
+        startsAt: "2026-07-19T21:37:33.000Z",
+      },
+      {
+        id: "grok_bot",
+        label: "Grok Bot",
+        kind: "weekly",
+        percentUsed: 38,
+        percentRemaining: 62,
+        startsAt: "2026-08-19T21:37:33.239Z",
+        resetsAt: "2026-08-26T21:37:33.239Z",
+      },
+    ]);
+  });
+
+  it("accepts snake_case GetSandUsageStatus fields", () => {
+    const result = normalizeCursorUsage(
+      { planUsage: { totalPercentUsed: 10 } },
+      undefined,
+      undefined,
+      {
+        current_period_start: "2026-08-19T21:37:33.239Z",
+        next_reset_timestamp_utc: "2026-08-26T21:37:33.239Z",
+        usage_percent: 12.4,
+        uses_pooled_enterprise_allowance: false,
+      },
+    );
+
+    expect(result?.windows).toContainEqual(
+      expect.objectContaining({
+        id: "grok_bot",
+        percentUsed: 12,
+        startsAt: "2026-08-19T21:37:33.239Z",
+        resetsAt: "2026-08-26T21:37:33.239Z",
+      }),
+    );
+  });
+
+  it("omits grok_bot when the sand payload has no finite usage percent", () => {
+    const result = normalizeCursorUsage(
+      { planUsage: { totalPercentUsed: 10 } },
+      undefined,
+      undefined,
+      { hasAvailableUsage: true, grokPlanLabel: "Grok Bot Plan" },
+    );
+
+    expect(result?.windows.map((window) => window.id)).toEqual([
+      "included_usage",
+    ]);
+  });
+
+  it("omits grok_bot for a pooled enterprise sand allowance", () => {
+    const result = normalizeCursorUsage(
+      { planUsage: { totalPercentUsed: 10 } },
+      undefined,
+      undefined,
+      {
+        usagePercent: 40,
+        usesPooledEnterpriseAllowance: true,
+        currentPeriodStart: "2026-08-19T21:37:33.239Z",
+        nextResetTimestampUtc: "2026-08-26T21:37:33.239Z",
+      },
+    );
+
+    expect(result?.windows.map((window) => window.id)).toEqual([
+      "included_usage",
+    ]);
+  });
+
+  it("reports grok_bot alone when Cursor exposes no IDE quota windows", () => {
+    const result = normalizeCursorUsage(
+      { planUsage: {} },
+      undefined,
+      undefined,
+      {
+        usagePercent: 5,
+        currentPeriodStart: "2026-08-19T21:37:33.239Z",
+        nextResetTimestampUtc: "2026-08-26T21:37:33.239Z",
+      },
+    );
+
+    expect(result?.windows).toMatchObject([
+      { id: "grok_bot", kind: "weekly", percentUsed: 5, percentRemaining: 95 },
+    ]);
+  });
+});
