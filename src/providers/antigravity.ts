@@ -26,7 +26,12 @@ import {
 } from "./common.js";
 
 export const ANTIGRAVITY_BINARY_ENV = "QUOTA_AXI_AGY_BINARY";
-export const ANTIGRAVITY_ARGS = ["-p", "/usage", "--output-format", "json"] as const;
+export const ANTIGRAVITY_ARGS = [
+  "-p",
+  "/usage",
+  "--output-format",
+  "json",
+] as const;
 export const ANTIGRAVITY_TIMEOUT_MS = 15_000;
 export const ANTIGRAVITY_MAX_OUTPUT_BYTES = 1_048_576;
 
@@ -273,7 +278,11 @@ export async function runAgyCommand(options: {
           shell: false,
           stdio: ["ignore", "pipe", "pipe"],
         };
-        child = spawnImpl(options.executablePath, [...ANTIGRAVITY_ARGS], spawnOptions);
+        child = spawnImpl(
+          options.executablePath,
+          [...ANTIGRAVITY_ARGS],
+          spawnOptions,
+        );
       } catch {
         reject(new AgyProcessError("agy_spawn_failed"));
         return;

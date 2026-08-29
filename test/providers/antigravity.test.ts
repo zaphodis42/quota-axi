@@ -29,7 +29,8 @@ const originalUserProfile = process.env.USERPROFILE;
 let tempRoot: string | undefined;
 
 afterEach(() => {
-  if (originalAgyBinary === undefined) delete process.env[ANTIGRAVITY_BINARY_ENV];
+  if (originalAgyBinary === undefined)
+    delete process.env[ANTIGRAVITY_BINARY_ENV];
   else process.env[ANTIGRAVITY_BINARY_ENV] = originalAgyBinary;
   if (originalXdgCacheHome === undefined) delete process.env.XDG_CACHE_HOME;
   else process.env.XDG_CACHE_HOME = originalXdgCacheHome;

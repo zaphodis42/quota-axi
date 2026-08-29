@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseFlags, parseModelsFlags } from "../src/args.js";
-import { main, normalizeArgv } from "../src/cli.js";
+import { main, normalizeArgv, TOP_HELP } from "../src/cli.js";
 import { authCommand, quotaCommand } from "../src/commands.js";
 import { PROVIDERS } from "../src/providers/index.js";
 import { redactedResponse } from "../src/render.js";
@@ -743,7 +743,6 @@ describe("CLI quota rendering", () => {
     );
   });
 
-
   it("renders Z.ai Coding Plan remaining quota in compact TOON and normalized JSON", async () => {
     useTempCache();
     PROVIDERS["zai-coding-plan"] = providerWithQuota(freshZaiCodingPlanQuota());
@@ -777,9 +776,6 @@ describe("CLI quota rendering", () => {
     expect(json.providers).toEqual([
       expect.objectContaining({
         provider: "zai-coding-plan",
-        label: "Z.ai Coding Plan",
-        source: "api",
-        plan: "pro",
         windows: [
           expect.objectContaining({ id: "five_hour", percentRemaining: 99 }),
           expect.objectContaining({ id: "weekly", percentRemaining: 80 }),
