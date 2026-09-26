@@ -401,6 +401,9 @@ function buildLiveCard(
     const resetsWindow =
       provider.provider === "codex"
         ? (provider.windows.find((window) => window.id === "weekly") ??
+          [...provider.windows]
+            .reverse()
+            .find((window) => window.kind !== "model") ??
           provider.windows[provider.windows.length - 1])
         : undefined;
     for (const window of provider.windows) {
