@@ -76,6 +76,25 @@ describe("quota cache", () => {
     });
   });
 
+  it("keeps a reported Codex reset count and only a reported count", () => {
+    useTempCache();
+    const counted = { ...quota("codex", 42), resetsAvailable: 2 };
+    stampCodexStoredAccountId(counted, "acct-signed-in");
+    writeCachedProviders([counted]);
+
+    expect(
+      readCachedCodexProvider(undefined, ["acct-signed-in"])?.resetsAvailable,
+    ).toBe(2);
+
+    const uncounted = quota("codex", 42);
+    stampCodexStoredAccountId(uncounted, "acct-signed-in");
+    writeCachedProviders([uncounted]);
+
+    expect(
+      readCachedCodexProvider(undefined, ["acct-signed-in"]),
+    ).not.toHaveProperty("resetsAvailable");
+  });
+
   it("continues from a mismatched Codex home snapshot to a matching keyless snapshot", () => {
     useTempCache();
     const foreignHome = quota("codex", 10);

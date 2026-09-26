@@ -10,7 +10,7 @@ import {
 import { withQuotaSemantics } from "../src/interpretation.js";
 import { withUsageFetchFailure } from "../src/providers/usage-fetch-failure.js";
 import { providerPresence } from "../src/lib/source-attempts.js";
-import { redactedResponse } from "../src/render.js";
+import { redactedResponse, renderQuotaToon } from "../src/render.js";
 import { PROVIDER_IDS } from "../src/types.js";
 import type { ProviderQuota, QuotaAxiResponse } from "../src/types.js";
 import {
@@ -82,6 +82,42 @@ function displayColumns(text: string): number {
 }
 
 describe("renderQuotaTui structure", () => {
+  it("shows reported Codex resets with the weekly window in TOON and TUI", () => {
+    const response = fixtureResponse();
+    const codex = response.providers.find(
+      (provider) => provider.provider === "codex",
+    );
+    if (!codex) throw new Error("Codex fixture missing");
+    codex.resetsAvailable = 1;
+
+    const toon = renderQuotaToon(response, "quota-axi", false);
+    expect(toon).toMatch(/codex,[^\n]*,resets_available,1 banked reset,none/);
+
+    const tui = renderQuotaTui(response, {
+      timeZone: "America/Los_Angeles",
+    }).split("\n");
+    const weekly = findCardLine(tui, 1, "1 reset");
+    expect(weekly).toContain("week");
+    expect(weekly).toHaveLength(CARD_COLUMNS);
+  });
+
+  it("keeps the reset display absent when Codex does not report a count", () => {
+    const response = fixtureResponse();
+    const codex = response.providers.find(
+      (provider) => provider.provider === "codex",
+    );
+    if (!codex) throw new Error("Codex fixture missing");
+    delete codex.resetsAvailable;
+
+    expect(renderQuotaToon(response, "quota-axi", false)).not.toContain(
+      "resets_available",
+    );
+    const tui = renderQuotaTui(response, {
+      timeZone: "America/Los_Angeles",
+    }).split("\n");
+    expect(tui.join("\n")).not.toContain("1 reset");
+  });
+
   it("summarizes the fleet in the dim header with local time", () => {
     const lines = render();
     expect(lines[0]).toBe(
