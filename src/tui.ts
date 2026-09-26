@@ -61,6 +61,12 @@ const TWO_COLUMN_MIN = CARD_WIDTH * 2 + CARD_GUTTER;
 const EFFECTIVE_BAR_WIDTH = 41;
 /** 3 gutter + 8 label + bar + 1 + 4 percent + 2 + 6 reset + 1 = CARD_INTERIOR. */
 const WINDOW_BAR_WIDTH = CARD_INTERIOR - 25;
+/**
+ * Banked resets are granted a few at a time, so a real count is one or two
+ * digits; anything larger is shown bounded so the row keeps the card width.
+ * TOON and JSON keep the exact count.
+ */
+const MAX_SHOWN_RESETS = 99;
 const MIN_COLUMNS = 80;
 const MAX_COLUMNS = 120;
 const GRAPHEME_SEGMENTER = new Intl.Segmenter("en", {
@@ -692,18 +698,16 @@ function windowRow(
   const resetCount =
     resetsAvailable === undefined
       ? undefined
-      : `${resetsAvailable} reset${resetsAvailable === 1 ? "" : "s"}`;
+      : resetsAvailable > MAX_SHOWN_RESETS
+        ? `${MAX_SHOWN_RESETS}+ resets`
+        : `${resetsAvailable} reset${resetsAvailable === 1 ? "" : "s"}`;
   return [
     { text: "   " },
     { text: padEndDisplay(shortWindowLabel(window), 8), style: "label" },
     ...thinBar(
       pct,
       marker,
-      Math.max(
-        1,
-        WINDOW_BAR_WIDTH -
-          (resetCount === undefined ? 0 : resetCount.length + 1),
-      ),
+      WINDOW_BAR_WIDTH - (resetCount === undefined ? 0 : resetCount.length + 1),
       show,
     ),
     { text: " " },

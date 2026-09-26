@@ -101,6 +101,27 @@ describe("renderQuotaTui structure", () => {
     expect(weekly).toHaveLength(CARD_COLUMNS);
   });
 
+  it("bounds a large Codex reset count so the card keeps its width", () => {
+    const response = fixtureResponse();
+    const codex = response.providers.find(
+      (provider) => provider.provider === "codex",
+    );
+    if (!codex) throw new Error("Codex fixture missing");
+    codex.resetsAvailable = 123_456;
+
+    expect(renderQuotaToon(response, "quota-axi", false)).toMatch(
+      /codex,[^\n]*,resets_available,123456 banked resets,none/,
+    );
+
+    const tui = renderQuotaTui(response, {
+      timeZone: "America/Los_Angeles",
+    }).split("\n");
+    const weekly = findCardLine(tui, 1, "99+ resets");
+    expect(weekly).toContain("week");
+    expect(weekly).toHaveLength(CARD_COLUMNS);
+    expect(tui.join("\n")).not.toContain("123456");
+  });
+
   it("shows reported Codex resets on the last window row without a weekly window", () => {
     const response = fixtureResponse();
     const codex = response.providers.find(
