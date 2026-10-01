@@ -251,3 +251,58 @@ export function fixtureResponse(): QuotaAxiResponse {
     ],
   };
 }
+
+export function zaiCodingPlanProvider(): ProviderQuota {
+  return {
+    provider: "zai-coding-plan",
+    label: "Z.ai Coding Plan",
+    source: "api",
+    plan: "pro",
+    fiveHourResetsAvailable: 4,
+    weekResetsAvailable: 3,
+    fiveHourResetsExpireAt: [
+      "2026-10-28T04:49:06.000Z",
+      "2026-10-28T04:49:06.000Z",
+      "2026-10-28T04:49:06.000Z",
+      "2026-10-28T04:49:06.000Z",
+    ],
+    weekResetsExpireAt: [
+      "2026-10-01T15:59:59.000Z",
+      "2026-10-18T13:21:30.000Z",
+      "2026-10-28T04:49:06.000Z",
+    ],
+    windows: [
+      {
+        id: "five_hour",
+        label: "session",
+        kind: "session",
+        percentUsed: 10,
+        percentRemaining: 90,
+        resetsAt: "2026-08-07T04:00:00.000Z",
+        windowSeconds: 18000,
+      },
+      {
+        id: "weekly",
+        label: "week",
+        kind: "weekly",
+        percentUsed: 49,
+        percentRemaining: 51,
+        resetsAt: "2026-08-11T21:00:00.000Z",
+        windowSeconds: 604800,
+      },
+      {
+        id: "mcp_month",
+        label: "mcp",
+        kind: "monthly",
+        percentUsed: 1,
+        percentRemaining: 99,
+      },
+    ],
+    state: {
+      status: "fresh",
+      stale: false,
+      refreshedAt: GENERATED_AT,
+      sourcesTried: ["pi:zai"],
+    },
+  };
+}

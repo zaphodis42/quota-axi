@@ -19,6 +19,7 @@ import {
   fixtureResponse,
   GENERATED_AT,
   signedOutProvider,
+  zaiCodingPlanProvider,
 } from "./fixtures/tui-response.js";
 
 const CARD_COLUMNS = 49;
@@ -1717,6 +1718,58 @@ describe("providers that are not set up", () => {
 
     expect(findLine(lines, "  alibaba · tried")).toContain(
       "bl-cli (skipped: credentials_missing)",
+    );
+  });
+});
+
+describe("zai coding plan banked reset counts", () => {
+  function renderZai(provider: ProviderQuota): string[] {
+    return renderQuotaTui(
+      {
+        generatedAt: GENERATED_AT,
+        schemaVersion: 5,
+        providers: [withQuotaSemantics(provider, GENERATED_AT)],
+      },
+      { timeZone: "UTC" },
+    ).split("\n");
+  }
+
+  it("puts each count on its own window row", () => {
+    const lines = renderZai(zaiCodingPlanProvider());
+
+    const fiveHour = findLine(lines, "4 resets");
+    expect(fiveHour).toContain("session");
+    const weekly = findLine(lines, "3 resets");
+    expect(weekly).toContain("week");
+    expect(lines.filter((line) => line.includes("resets"))).toHaveLength(2);
+  });
+
+  it("bounds counts above 99 so the row keeps the card width", () => {
+    const lines = renderZai({
+      ...zaiCodingPlanProvider(),
+      fiveHourResetsAvailable: 250,
+    });
+
+    expect(findLine(lines, "99+ resets")).toContain("session");
+  });
+
+  it("renders no counts without the fields or on a stale card", () => {
+    const countless: ProviderQuota = { ...zaiCodingPlanProvider() };
+    delete countless.fiveHourResetsAvailable;
+    delete countless.weekResetsAvailable;
+    delete countless.fiveHourResetsExpireAt;
+    delete countless.weekResetsExpireAt;
+    expect(
+      renderZai(countless).filter((line) => line.includes("resets")),
+    ).toHaveLength(0);
+
+    const stale = zaiCodingPlanProvider();
+    const staleLines = renderZai({
+      ...stale,
+      state: { ...stale.state, status: "stale", stale: true },
+    });
+    expect(staleLines.filter((line) => line.includes("resets"))).toHaveLength(
+      0,
     );
   });
 });
