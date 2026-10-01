@@ -24,6 +24,7 @@ import {
   stampCodexStoredAccountId,
 } from "../src/cache.js";
 import { annotateQuotaAdvice } from "../src/advice.js";
+import { quotaJsonReport, renderQuotaToon } from "../src/render.js";
 import { cacheFilePath, claudeCredentialContextId } from "../src/lib/fs.js";
 import {
   clearCommandCodeReadingContextId,
@@ -134,6 +135,62 @@ describe("quota cache", () => {
     );
   });
 
+  it("never serves Z.ai banked reset counts from a stale or reused reading", () => {
+    useTempCache();
+    const counted = {
+      ...quota("zai-coding-plan", 42),
+      fiveHourResetsAvailable: 4,
+      weekResetsAvailable: 6,
+    };
+    writeCachedProviders([counted]);
+
+    expect(readFileSync(cacheFilePath(), "utf8")).not.toContain(
+      "fiveHourResetsAvailable",
+    );
+    expect(readFileSync(cacheFilePath(), "utf8")).not.toContain(
+      "weekResetsAvailable",
+    );
+    const cached = readCachedProvider("zai-coding-plan");
+    expect(cached).toMatchObject({ windows: [{ percentUsed: 42 }] });
+    expect(cached).not.toHaveProperty("fiveHourResetsAvailable");
+    expect(cached).not.toHaveProperty("weekResetsAvailable");
+
+    const now = Date.parse("2026-07-06T19:00:00Z");
+    const stale = staleFromCache(
+      cached as ProviderQuota,
+      "Z.ai quota unavailable",
+      ["zai-api-key-env"],
+      [],
+      now,
+    );
+    expect(stale?.state.stale).toBe(true);
+    const generatedAt = "2026-07-06T19:00:00.000Z";
+    const response = {
+      generatedAt,
+      schemaVersion: 5,
+      providers: [withQuotaSemantics(stale as ProviderQuota, generatedAt)],
+    };
+    expect(renderQuotaToon(response, "quota-axi", false)).not.toContain(
+      "resets_available",
+    );
+    expect(quotaJsonReport(response, false).providers[0]).not.toHaveProperty(
+      "fiveHourResetsAvailable",
+    );
+
+    const snapshotFile = join(tempDir as string, "snapshot.json");
+    writeFileSync(
+      snapshotFile,
+      JSON.stringify({ schemaVersion: 3, providers: [counted] }),
+    );
+    const reused = readSnapshotProviders(snapshotFile, "zai-coding-plan", now);
+    expect(reused).toMatchObject([{ state: { reused: true } }]);
+    expect((reused as ProviderQuota[])[0]).not.toHaveProperty(
+      "fiveHourResetsAvailable",
+    );
+    expect((reused as ProviderQuota[])[0]).not.toHaveProperty(
+      "weekResetsAvailable",
+    );
+  });
   it("continues from a mismatched Codex home snapshot to a matching keyless snapshot", () => {
     useTempCache();
     const foreignHome = quota("codex", 10);

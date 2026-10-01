@@ -294,12 +294,13 @@ function providerStateRows(
       remedy: NONE,
     });
   }
-  if (provider.provider === "codex" && provider.resetsAvailable !== undefined) {
+  const bankedResets = bankedResetDetail(provider);
+  if (bankedResets) {
     rows.push({
       ...providerColumns(provider),
       scope: "all",
       kind: "resets_available",
-      detail: `${provider.resetsAvailable} banked reset${provider.resetsAvailable === 1 ? "" : "s"}`,
+      detail: bankedResets,
       remedy: NONE,
     });
   }
@@ -347,6 +348,27 @@ function creditBalance(provider: ProviderQuota): string | undefined {
   if (credits.unlimited) return "credits unlimited";
   if (credits.remaining === undefined) return undefined;
   return `remaining ${credits.remaining} ${credits.unit ?? "credits"}`;
+}
+
+/**
+ * Vendor-supplied banked-reset counts, stated verbatim: Codex's single count
+ * and Z.ai Coding Plan's per-reset-type counts. The fields only exist on a
+ * fresh vendor read — they are never cached, so a stale or reused reading
+ * carries none and gets no row.
+ */
+function bankedResetDetail(provider: ProviderQuota): string | undefined {
+  const codex = provider.resetsAvailable;
+  const fiveHour = provider.fiveHourResetsAvailable;
+  const week = provider.weekResetsAvailable;
+  if (codex !== undefined) {
+    return `${codex} banked reset${codex === 1 ? "" : "s"}`;
+  }
+  if (fiveHour === undefined && week === undefined) return undefined;
+  const parts: string[] = [];
+  if (fiveHour !== undefined) parts.push(`${fiveHour} five-hour`);
+  if (week !== undefined) parts.push(`${week} weekly`);
+  const total = (fiveHour ?? 0) + (week ?? 0);
+  return `${parts.join(DETAIL_SEPARATOR)} banked reset${total === 1 ? "" : "s"}`;
 }
 
 function primaryProviderRow(provider: ProviderQuota): AttentionRow | undefined {

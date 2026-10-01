@@ -32,6 +32,8 @@ import {
 } from "./zai-api-key-credential.js";
 
 const ZAI_QUOTA_URL = "https://api.z.ai/api/monitor/usage/quota/limit";
+const ZAI_RESET_LIST_URL =
+  "https://api.z.ai/api/biz/customer-package-reset/list?targetType=PERSONAL";
 const PI_ZAI_CREDENTIAL_SOURCE = "pi:zai";
 const OPERATION_DEADLINE_MS = 15_000;
 const RESPONSE_LIMIT_BYTES = 262_144;
@@ -100,6 +102,11 @@ export type NormalizedZaiQuota = {
   windows: QuotaWindow[];
   diagnostics: ZaiDiagnostic[];
   plan?: string;
+};
+
+export type NormalizedZaiResetList = {
+  fiveHourResetsAvailable?: number;
+  weekResetsAvailable?: number;
 };
 
 type ZaiDependencies = {
@@ -261,6 +268,16 @@ async function acquireZaiQuota(
       dependencies.fetch,
       dependencies.now,
     );
+    // Companion read for banked reset cards. It decorates an already
+    // successful quota reading and can never degrade one: every failure mode
+    // below just omits the counts. The counts are never cached (a card can
+    // be spent or granted right after the reading), so only this fresh
+    // reading reports them.
+    const resetList = await requestZaiResetList(
+      credential,
+      controller.signal,
+      dependencies.fetch,
+    );
     const untrustedWindowIds = outcome.diagnostics.map(
       (diagnostic) => `limit:${diagnostic.index}`,
     );
@@ -274,6 +291,12 @@ async function acquireZaiQuota(
       label: "Z.ai Coding Plan",
       source: "api",
       ...(outcome.plan ? { plan: outcome.plan } : {}),
+      ...(resetList?.fiveHourResetsAvailable !== undefined
+        ? { fiveHourResetsAvailable: resetList.fiveHourResetsAvailable }
+        : {}),
+      ...(resetList?.weekResetsAvailable !== undefined
+        ? { weekResetsAvailable: resetList.weekResetsAvailable }
+        : {}),
       windows: outcome.windows,
       state: {
         status: "fresh",
@@ -551,6 +574,76 @@ async function requestZaiQuota(
   } finally {
     await lifetime.cancel();
   }
+}
+
+/**
+ * Banked reset cards ride on the same Bearer credential as the quota read,
+ * but they are decoration: this read is soft by contract and returns
+ * `undefined` on every failure mode -- transport, timeout, abort, HTTP
+ * status, envelope, auth -- so the quota reading it accompanies is never
+ * degraded and never retired. The vendor's `/use` and `/opportunity`
+ * mutations are never called; this is the only reset-card request.
+ */
+async function requestZaiResetList(
+  apiKey: string,
+  signal: AbortSignal,
+  fetchImplementation: typeof globalThis.fetch,
+): Promise<NormalizedZaiResetList | undefined> {
+  let response: Response;
+  try {
+    response = await waitForDeadline(
+      fetchImplementation(ZAI_RESET_LIST_URL, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: "application/json",
+          "User-Agent": USER_AGENT,
+        },
+        credentials: "omit",
+        redirect: "manual",
+        signal,
+      }),
+      signal,
+    );
+  } catch {
+    return undefined;
+  }
+  const lifetime = createResponseBodyLifetime(response);
+  try {
+    if (response.status !== 200) return undefined;
+    const bytes = await readBoundedBody(response, signal, lifetime);
+    lifetime.markConsumed();
+    const envelope = parseZaiEnvelope(bytes);
+    if (envelope.code !== 200 || !envelope.success) return undefined;
+    return normalizeZaiResetList(envelope.data);
+  } catch {
+    return undefined;
+  } finally {
+    await lifetime.cancel();
+  }
+}
+
+export function normalizeZaiResetList(
+  data: Record<string, unknown> | undefined,
+): NormalizedZaiResetList {
+  const fiveHour = availableResetCount(data?.fiveHourResets);
+  const week = availableResetCount(data?.weekResets);
+  return {
+    ...(fiveHour !== undefined ? { fiveHourResetsAvailable: fiveHour } : {}),
+    ...(week !== undefined ? { weekResetsAvailable: week } : {}),
+  };
+}
+
+/**
+ * Only the vendor's own `available: true` cards count. A missing array is
+ * "the vendor said nothing" and yields no field at all; an empty array is a
+ * vendor-supplied zero. `expireTime` strings are deliberately not
+ * interpreted: they carry no timezone, so surfacing them as instants would
+ * invent a boundary the vendor did not state.
+ */
+function availableResetCount(value: unknown): number | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((entry) => objectValue(entry)?.available === true).length;
 }
 
 function parseZaiEnvelope(bytes: Uint8Array): ZaiEnvelope {

@@ -304,6 +304,13 @@ export type ProviderQuota = {
   plan?: string;
   /** Number of banked Codex rate-limit resets the source reports available. */
   resetsAvailable?: number;
+  /**
+   * Banked Z.ai reset cards the vendor reports as still available, per reset
+   * type. Present only on a fresh reading: a card can be spent or granted at
+   * any moment, so the counts are never written to the cache.
+   */
+  fiveHourResetsAvailable?: number;
+  weekResetsAvailable?: number;
   account?: {
     email?: string;
     organization?: string;
