@@ -145,7 +145,7 @@ export function createZaiCodingPlanAdapter(
     deleteCachedProvider: deleteCachedProviderFromDisk,
     now: Date.now,
     deadlineMs: OPERATION_DEADLINE_MS,
-    resetTimeZone: resolveResetClockTimeZone,
+    resetTimeZone: () => ZAI_RESET_TIME_ZONE,
     ...overrides,
   };
   let inFlight: Promise<ProviderQuota> | undefined;
@@ -635,37 +635,16 @@ async function requestZaiResetList(
   }
 }
 
-const DEFAULT_RESET_TIME_ZONE = "Asia/Singapore";
+/**
+ * The vendor's reset-card expiry strings carry no timezone, and the vendor
+ * writes them on its home clock: Asia/Singapore (UTC+8), confirmed by
+ * observation against the vendor console. Expiry instants are read against
+ * that fixed zone on every machine. The vendor string, not the conversion,
+ * is ground truth.
+ */
+const ZAI_RESET_TIME_ZONE = "Asia/Singapore";
 const ZAI_RESET_TIME_FORMAT =
   /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/;
-
-/**
- * The vendor's reset-card expiry strings carry no timezone. House rule for
- * this fork: read them against the local machine's timezone when it is
- * known, else against Asia/Singapore (UTC+8, matching the vendor's home
- * clock). The assumption is documented in the README; the vendor string,
- * not the conversion, is ground truth.
- */
-export function resolveResetClockTimeZone(): string {
-  try {
-    const resolved = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (resolved && resolved !== "Etc/Unknown" && timeZoneIsValid(resolved)) {
-      return resolved;
-    }
-  } catch {
-    // No usable local timezone identity; fall through to the default.
-  }
-  return DEFAULT_RESET_TIME_ZONE;
-}
-
-function timeZoneIsValid(zone: string): boolean {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: zone });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Interprets a timezone-less "YYYY-MM-DD HH:mm:ss" wall-clock string as an
@@ -730,7 +709,7 @@ function zoneOffsetMs(timeZone: string, atMs: number): number {
 
 export function normalizeZaiResetList(
   data: Record<string, unknown> | undefined,
-  timeZone: string = resolveResetClockTimeZone(),
+  timeZone: string = ZAI_RESET_TIME_ZONE,
 ): NormalizedZaiResetList {
   const fiveHour = resetTypeSummary(data?.fiveHourResets, timeZone);
   const week = resetTypeSummary(data?.weekResets, timeZone);

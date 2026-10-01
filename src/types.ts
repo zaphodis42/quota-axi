@@ -313,11 +313,11 @@ export type ProviderQuota = {
   weekResetsAvailable?: number;
   /**
    * Expiry instants (UTC ISO) for each counted card, ascending, one per
-   * count. The vendor's timezone-less `expireTime` strings are read against
-   * the local machine's timezone, or Asia/Singapore when the local zone is
-   * unknown; the vendor string, not the conversion, is ground truth. The
-   * array is omitted for a type when any counted card lacks a parseable
-   * timestamp.
+   * count. The vendor's timezone-less `expireTime` strings are read
+   * against the vendor's home clock, Asia/Singapore (UTC+8), confirmed by
+   * observation against the vendor console; the vendor string, not the
+   * conversion, is ground truth. The array is omitted for a type when any
+   * counted card lacks a parseable timestamp.
    */
   fiveHourResetsExpireAt?: string[];
   weekResetsExpireAt?: string[];

@@ -26,7 +26,7 @@ import type {
 vi.mock("../../src/lib/http.js", () => ({ providerFetch: vi.fn() }));
 
 const NOW = Date.parse("2027-02-03T04:05:06.000Z");
-const OPTIONS = { allowKeychainPrompt: false };
+const OPTIONS = { allowKeychainPrompt: false, refreshCredentials: false };
 
 // The exact payload verified against a live Pro-tier key in the issue.
 const SUCCESS_PAYLOAD = {
@@ -834,11 +834,13 @@ describe("Z.ai Coding Plan deadline enforcement", () => {
 
 describe("Z.ai Coding Plan banked reset cards", () => {
   const RESET_LIST_PATH = "/api/biz/customer-package-reset/list";
-  // UTC+8: the documented fallback zone, pinned here so expected instants
-  // are deterministic regardless of the machine running the tests.
+  // UTC+8: the vendor's home clock that the provider pins reset-card
+  // expiry instants to; injected so expected instants stay deterministic
+  // regardless of the machine running the tests.
   const TEST_TIME_ZONE = "Asia/Singapore";
 
-  // Shape captured from the live list endpoint; recordIds are synthetic.
+  // Shape captured from the live list endpoint; every identifier is
+  // synthetic.
   function resetCard(overrides: Record<string, unknown> = {}) {
     return {
       recordId: 1_231_924,
@@ -853,7 +855,7 @@ describe("Z.ai Coding Plan banked reset cards", () => {
     code: 200,
     msg: "Operation successful",
     data: {
-      customerId: 7_352_176_456_259_786,
+      customerId: 1_234_567_890_123_456,
       targetType: "PERSONAL",
       organizationId: null,
       projectId: null,
