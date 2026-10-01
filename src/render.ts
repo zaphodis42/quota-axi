@@ -351,10 +351,10 @@ function creditBalance(provider: ProviderQuota): string | undefined {
 }
 
 /**
- * Vendor-supplied banked-reset counts, stated verbatim: Codex's single count
- * and Z.ai Coding Plan's per-reset-type counts. The fields only exist on a
- * fresh vendor read — they are never cached, so a stale or reused reading
- * carries none and gets no row.
+ * Vendor-supplied banked-reset counts and expiry instants, stated verbatim:
+ * Codex's single count and Z.ai Coding Plan's per-reset-type counts. The
+ * fields only exist on a fresh vendor read — they are never cached, so a
+ * stale or reused reading carries none and gets no row.
  */
 function bankedResetDetail(provider: ProviderQuota): string | undefined {
   const codex = provider.resetsAvailable;
@@ -368,7 +368,13 @@ function bankedResetDetail(provider: ProviderQuota): string | undefined {
   if (fiveHour !== undefined) parts.push(`${fiveHour} five-hour`);
   if (week !== undefined) parts.push(`${week} weekly`);
   const total = (fiveHour ?? 0) + (week ?? 0);
-  return `${parts.join(DETAIL_SEPARATOR)} banked reset${total === 1 ? "" : "s"}`;
+  const earliest = [
+    ...(provider.fiveHourResetsExpireAt ?? []),
+    ...(provider.weekResetsExpireAt ?? []),
+  ].sort()[0];
+  return `${parts.join(DETAIL_SEPARATOR)} banked reset${total === 1 ? "" : "s"}${
+    earliest ? `${DETAIL_SEPARATOR}earliest expires ${earliest}` : ""
+  }`;
 }
 
 function primaryProviderRow(provider: ProviderQuota): AttentionRow | undefined {

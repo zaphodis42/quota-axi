@@ -24,7 +24,6 @@ import {
   stampCodexStoredAccountId,
 } from "../src/cache.js";
 import { annotateQuotaAdvice } from "../src/advice.js";
-import { quotaJsonReport, renderQuotaToon } from "../src/render.js";
 import { cacheFilePath, claudeCredentialContextId } from "../src/lib/fs.js";
 import {
   clearCommandCodeReadingContextId,
@@ -141,6 +140,11 @@ describe("quota cache", () => {
       ...quota("zai-coding-plan", 42),
       fiveHourResetsAvailable: 4,
       weekResetsAvailable: 6,
+      fiveHourResetsExpireAt: ["2026-10-28T04:49:06.000Z"],
+      weekResetsExpireAt: [
+        "2026-10-01T15:59:59.000Z",
+        "2026-10-28T04:49:06.000Z",
+      ],
     };
     writeCachedProviders([counted]);
 
@@ -150,10 +154,15 @@ describe("quota cache", () => {
     expect(readFileSync(cacheFilePath(), "utf8")).not.toContain(
       "weekResetsAvailable",
     );
+    expect(readFileSync(cacheFilePath(), "utf8")).not.toContain(
+      "fiveHourResetsExpireAt",
+    );
     const cached = readCachedProvider("zai-coding-plan");
     expect(cached).toMatchObject({ windows: [{ percentUsed: 42 }] });
     expect(cached).not.toHaveProperty("fiveHourResetsAvailable");
     expect(cached).not.toHaveProperty("weekResetsAvailable");
+    expect(cached).not.toHaveProperty("fiveHourResetsExpireAt");
+    expect(cached).not.toHaveProperty("weekResetsExpireAt");
 
     const now = Date.parse("2026-07-06T19:00:00Z");
     const stale = staleFromCache(
@@ -189,6 +198,12 @@ describe("quota cache", () => {
     );
     expect((reused as ProviderQuota[])[0]).not.toHaveProperty(
       "weekResetsAvailable",
+    );
+    expect((reused as ProviderQuota[])[0]).not.toHaveProperty(
+      "fiveHourResetsExpireAt",
+    );
+    expect((reused as ProviderQuota[])[0]).not.toHaveProperty(
+      "weekResetsExpireAt",
     );
   });
   it("continues from a mismatched Codex home snapshot to a matching keyless snapshot", () => {

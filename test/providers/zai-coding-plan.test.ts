@@ -834,6 +834,9 @@ describe("Z.ai Coding Plan deadline enforcement", () => {
 
 describe("Z.ai Coding Plan banked reset cards", () => {
   const RESET_LIST_PATH = "/api/biz/customer-package-reset/list";
+  // UTC+8: the documented fallback zone, pinned here so expected instants
+  // are deterministic regardless of the machine running the tests.
+  const TEST_TIME_ZONE = "Asia/Singapore";
 
   // Shape captured from the live list endpoint; recordIds are synthetic.
   function resetCard(overrides: Record<string, unknown> = {}) {
@@ -883,8 +886,17 @@ describe("Z.ai Coding Plan banked reset cards", () => {
     });
   }
 
+  function resetTestAdapter(
+    overrides: Parameters<typeof createZaiCodingPlanAdapter>[0] = {},
+  ) {
+    return testAdapter({
+      resetTimeZone: () => TEST_TIME_ZONE,
+      ...overrides,
+    });
+  }
+
   it("counts only the vendor's available cards, per reset type", async () => {
-    const report = await testAdapter({
+    const report = await resetTestAdapter({
       fetch: dualFetch({
         ...RESET_LIST_PAYLOAD,
         data: {
@@ -902,10 +914,35 @@ describe("Z.ai Coding Plan banked reset cards", () => {
     expect(report.state.status).toBe("fresh");
     expect(report.fiveHourResetsAvailable).toBe(2);
     expect(report.weekResetsAvailable).toBe(1);
+    expect(report.fiveHourResetsExpireAt).toEqual([
+      "2026-10-28T04:49:06.000Z",
+      "2026-10-28T04:49:06.000Z",
+    ]);
+    expect(report.weekResetsExpireAt).toEqual(["2026-10-28T04:49:06.000Z"]);
+  });
+
+  it("reads every counted card's expiry as an ascending UTC instant", async () => {
+    const report = await resetTestAdapter({
+      fetch: dualFetch(RESET_LIST_PAYLOAD),
+    }).fetchQuota(OPTIONS);
+
+    expect(report.fiveHourResetsAvailable).toBe(4);
+    expect(report.weekResetsAvailable).toBe(3);
+    expect(report.fiveHourResetsExpireAt).toEqual([
+      "2026-10-28T04:49:06.000Z",
+      "2026-10-28T04:49:06.000Z",
+      "2026-10-28T04:49:06.000Z",
+      "2026-10-28T04:49:06.000Z",
+    ]);
+    expect(report.weekResetsExpireAt).toEqual([
+      "2026-10-01T15:59:59.000Z",
+      "2026-10-18T13:21:30.000Z",
+      "2026-10-28T04:49:06.000Z",
+    ]);
   });
 
   it("reports a vendor-supplied empty list as zero and a missing list as no field", async () => {
-    const empty = await testAdapter({
+    const empty = await resetTestAdapter({
       fetch: dualFetch({
         ...RESET_LIST_PAYLOAD,
         data: {
@@ -917,8 +954,10 @@ describe("Z.ai Coding Plan banked reset cards", () => {
     }).fetchQuota(OPTIONS);
     expect(empty.fiveHourResetsAvailable).toBe(0);
     expect(empty.weekResetsAvailable).toBe(0);
+    expect(empty.fiveHourResetsExpireAt).toEqual([]);
+    expect(empty.weekResetsExpireAt).toEqual([]);
 
-    const missing = await testAdapter({
+    const missing = await resetTestAdapter({
       fetch: dualFetch({
         ...RESET_LIST_PAYLOAD,
         data: { customerId: 1, targetType: "PERSONAL" },
@@ -926,6 +965,31 @@ describe("Z.ai Coding Plan banked reset cards", () => {
     }).fetchQuota(OPTIONS);
     expect(missing).not.toHaveProperty("fiveHourResetsAvailable");
     expect(missing).not.toHaveProperty("weekResetsAvailable");
+    expect(missing).not.toHaveProperty("fiveHourResetsExpireAt");
+    expect(missing).not.toHaveProperty("weekResetsExpireAt");
+  });
+
+  it("keeps a type's count but omits its expiries when a timestamp is unparseable", async () => {
+    const report = await resetTestAdapter({
+      fetch: dualFetch({
+        ...RESET_LIST_PAYLOAD,
+        data: {
+          ...RESET_LIST_PAYLOAD.data,
+          fiveHourResets: [
+            resetCard(),
+            resetCard({ recordId: 2, expireTime: "not-a-date" }),
+            resetCard({ recordId: 3, expireTime: undefined }),
+          ],
+          weekResets: [resetCard({ recordId: 4 })],
+        },
+      }),
+    }).fetchQuota(OPTIONS);
+
+    expect(report.state.status).toBe("fresh");
+    expect(report.fiveHourResetsAvailable).toBe(3);
+    expect(report).not.toHaveProperty("fiveHourResetsExpireAt");
+    expect(report.weekResetsAvailable).toBe(1);
+    expect(report.weekResetsExpireAt).toEqual(["2026-10-28T04:49:06.000Z"]);
   });
 
   it("keeps the quota reading fresh when the reset-card request fails", async () => {
@@ -936,17 +1000,21 @@ describe("Z.ai Coding Plan banked reset cards", () => {
       }
       return jsonResponse(SUCCESS_PAYLOAD);
     });
-    const report = await testAdapter({ fetch: request }).fetchQuota(OPTIONS);
+    const report = await resetTestAdapter({ fetch: request }).fetchQuota(
+      OPTIONS,
+    );
 
     expect(report.state.status).toBe("fresh");
     expect(report.windows).toHaveLength(3);
     expect(report).not.toHaveProperty("fiveHourResetsAvailable");
     expect(report).not.toHaveProperty("weekResetsAvailable");
+    expect(report).not.toHaveProperty("fiveHourResetsExpireAt");
+    expect(report).not.toHaveProperty("weekResetsExpireAt");
     expect(request).toHaveBeenCalledTimes(2);
   });
 
   it("omits the counts on a non-success reset envelope without touching state", async () => {
-    const report = await testAdapter({
+    const report = await resetTestAdapter({
       fetch: dualFetch({ code: 401, msg: "unauthorized", success: false }),
     }).fetchQuota(OPTIONS);
 
@@ -954,11 +1022,13 @@ describe("Z.ai Coding Plan banked reset cards", () => {
     expect(report.state.error).toBeUndefined();
     expect(report).not.toHaveProperty("fiveHourResetsAvailable");
     expect(report).not.toHaveProperty("weekResetsAvailable");
+    expect(report).not.toHaveProperty("fiveHourResetsExpireAt");
+    expect(report).not.toHaveProperty("weekResetsExpireAt");
   });
 
   it("never queries the reset-card mutation endpoints", async () => {
     const request = dualFetch(RESET_LIST_PAYLOAD);
-    await testAdapter({ fetch: request }).fetchQuota(OPTIONS);
+    await resetTestAdapter({ fetch: request }).fetchQuota(OPTIONS);
 
     const paths = request.mock.calls.map(
       ([input]) => new URL(String(input)).pathname,
@@ -966,26 +1036,91 @@ describe("Z.ai Coding Plan banked reset cards", () => {
     expect(paths).toEqual(["/api/monitor/usage/quota/limit", RESET_LIST_PATH]);
   });
 
-  it("normalizes the reset list directly", () => {
+  it("normalizes the reset list directly against an explicit zone", () => {
     expect(
-      normalizeZaiResetList({
-        fiveHourResets: [
-          { recordId: 1, available: true },
-          { recordId: 2, available: false },
-          { recordId: 3 },
-        ],
-        weekResets: [{ recordId: 4, available: true }],
-      }),
-    ).toEqual({ fiveHourResetsAvailable: 1, weekResetsAvailable: 1 });
-    expect(normalizeZaiResetList(undefined)).toEqual({});
-    expect(normalizeZaiResetList({ weekResets: "not-an-array" })).toEqual({});
+      normalizeZaiResetList(
+        {
+          fiveHourResets: [
+            { recordId: 1, available: true, expireTime: "2026-10-28 12:49:06" },
+            {
+              recordId: 2,
+              available: false,
+              expireTime: "2026-10-28 12:49:06",
+            },
+          ],
+          weekResets: [
+            { recordId: 4, available: true, expireTime: "2026-10-01 23:59:59" },
+          ],
+        },
+        "Asia/Singapore",
+      ),
+    ).toEqual({
+      fiveHourResetsAvailable: 1,
+      fiveHourResetsExpireAt: ["2026-10-28T04:49:06.000Z"],
+      weekResetsAvailable: 1,
+      weekResetsExpireAt: ["2026-10-01T15:59:59.000Z"],
+    });
+    expect(
+      normalizeZaiResetList(
+        {
+          weekResets: [
+            { recordId: 4, available: true, expireTime: "2026-10-28 12:49:06" },
+          ],
+        },
+        "UTC",
+      ),
+    ).toEqual({
+      weekResetsAvailable: 1,
+      weekResetsExpireAt: ["2026-10-28T12:49:06.000Z"],
+    });
+    expect(
+      normalizeZaiResetList(
+        {
+          weekResets: [
+            { recordId: 4, available: true, expireTime: "2026-07-06 12:00:00" },
+          ],
+        },
+        "America/New_York",
+      ),
+    ).toEqual({
+      weekResetsAvailable: 1,
+      // EDT in July: the wall clock settles at UTC-4, not the winter offset.
+      weekResetsExpireAt: ["2026-07-06T16:00:00.000Z"],
+    });
+    expect(normalizeZaiResetList(undefined, "UTC")).toEqual({});
+    expect(
+      normalizeZaiResetList({ weekResets: "not-an-array" }, "UTC"),
+    ).toEqual({});
   });
 
   it("renders a resets_available attention row for the fresh reading", async () => {
-    const report = await testAdapter({
-      fetch: dualFetch(RESET_LIST_PAYLOAD),
-    }).fetchQuota(OPTIONS);
     const generatedAt = new Date(NOW).toISOString();
+    const report: ProviderQuota = {
+      provider: "zai-coding-plan",
+      source: "api",
+      fiveHourResetsAvailable: 4,
+      weekResetsAvailable: 3,
+      fiveHourResetsExpireAt: [
+        "2026-10-28T04:49:06.000Z",
+        "2026-10-28T04:49:06.000Z",
+        "2026-10-28T04:49:06.000Z",
+        "2026-10-28T04:49:06.000Z",
+      ],
+      weekResetsExpireAt: [
+        "2026-10-01T15:59:59.000Z",
+        "2026-10-18T13:21:30.000Z",
+        "2026-10-28T04:49:06.000Z",
+      ],
+      windows: [
+        { id: "five_hour", label: "session", kind: "session", percentUsed: 10 },
+      ],
+      state: {
+        status: "fresh",
+        stale: false,
+        refreshedAt: generatedAt,
+        sourcesTried: ["pi:zai"],
+      },
+    };
     const toon = renderQuotaToon(
       {
         generatedAt,
@@ -997,7 +1132,9 @@ describe("Z.ai Coding Plan banked reset cards", () => {
     );
 
     expect(toon).toContain("resets_available");
-    expect(toon).toContain("4 five-hour · 3 weekly banked resets");
+    expect(toon).toContain(
+      "4 five-hour · 3 weekly banked resets · earliest expires 2026-10-01T15:59:59.000Z",
+    );
   });
 });
 

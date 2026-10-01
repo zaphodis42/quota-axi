@@ -107,6 +107,8 @@ export type NormalizedZaiQuota = {
 export type NormalizedZaiResetList = {
   fiveHourResetsAvailable?: number;
   weekResetsAvailable?: number;
+  fiveHourResetsExpireAt?: string[];
+  weekResetsExpireAt?: string[];
 };
 
 type ZaiDependencies = {
@@ -117,6 +119,7 @@ type ZaiDependencies = {
   deleteCachedProvider: typeof deleteCachedProviderFromDisk;
   now: () => number;
   deadlineMs: number;
+  resetTimeZone: () => string;
 };
 
 type ZaiFailureOptions = {
@@ -142,6 +145,7 @@ export function createZaiCodingPlanAdapter(
     deleteCachedProvider: deleteCachedProviderFromDisk,
     now: Date.now,
     deadlineMs: OPERATION_DEADLINE_MS,
+    resetTimeZone: resolveResetClockTimeZone,
     ...overrides,
   };
   let inFlight: Promise<ProviderQuota> | undefined;
@@ -277,6 +281,7 @@ async function acquireZaiQuota(
       credential,
       controller.signal,
       dependencies.fetch,
+      dependencies.resetTimeZone(),
     );
     const untrustedWindowIds = outcome.diagnostics.map(
       (diagnostic) => `limit:${diagnostic.index}`,
@@ -296,6 +301,12 @@ async function acquireZaiQuota(
         : {}),
       ...(resetList?.weekResetsAvailable !== undefined
         ? { weekResetsAvailable: resetList.weekResetsAvailable }
+        : {}),
+      ...(resetList?.fiveHourResetsExpireAt !== undefined
+        ? { fiveHourResetsExpireAt: resetList.fiveHourResetsExpireAt }
+        : {}),
+      ...(resetList?.weekResetsExpireAt !== undefined
+        ? { weekResetsExpireAt: resetList.weekResetsExpireAt }
         : {}),
       windows: outcome.windows,
       state: {
@@ -588,6 +599,7 @@ async function requestZaiResetList(
   apiKey: string,
   signal: AbortSignal,
   fetchImplementation: typeof globalThis.fetch,
+  timeZone: string,
 ): Promise<NormalizedZaiResetList | undefined> {
   let response: Response;
   try {
@@ -615,7 +627,7 @@ async function requestZaiResetList(
     lifetime.markConsumed();
     const envelope = parseZaiEnvelope(bytes);
     if (envelope.code !== 200 || !envelope.success) return undefined;
-    return normalizeZaiResetList(envelope.data);
+    return normalizeZaiResetList(envelope.data, timeZone);
   } catch {
     return undefined;
   } finally {
@@ -623,27 +635,152 @@ async function requestZaiResetList(
   }
 }
 
-export function normalizeZaiResetList(
-  data: Record<string, unknown> | undefined,
-): NormalizedZaiResetList {
-  const fiveHour = availableResetCount(data?.fiveHourResets);
-  const week = availableResetCount(data?.weekResets);
-  return {
-    ...(fiveHour !== undefined ? { fiveHourResetsAvailable: fiveHour } : {}),
-    ...(week !== undefined ? { weekResetsAvailable: week } : {}),
-  };
+const DEFAULT_RESET_TIME_ZONE = "Asia/Singapore";
+const ZAI_RESET_TIME_FORMAT =
+  /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/;
+
+/**
+ * The vendor's reset-card expiry strings carry no timezone. House rule for
+ * this fork: read them against the local machine's timezone when it is
+ * known, else against Asia/Singapore (UTC+8, matching the vendor's home
+ * clock). The assumption is documented in the README; the vendor string,
+ * not the conversion, is ground truth.
+ */
+export function resolveResetClockTimeZone(): string {
+  try {
+    const resolved = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (resolved && resolved !== "Etc/Unknown" && timeZoneIsValid(resolved)) {
+      return resolved;
+    }
+  } catch {
+    // No usable local timezone identity; fall through to the default.
+  }
+  return DEFAULT_RESET_TIME_ZONE;
+}
+
+function timeZoneIsValid(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Only the vendor's own `available: true` cards count. A missing array is
- * "the vendor said nothing" and yields no field at all; an empty array is a
- * vendor-supplied zero. `expireTime` strings are deliberately not
- * interpreted: they carry no timezone, so surfacing them as instants would
- * invent a boundary the vendor did not state.
+ * Interprets a timezone-less "YYYY-MM-DD HH:mm:ss" wall-clock string as an
+ * instant in `timeZone` and returns UTC ISO. Offsets are resolved with two
+ * correction passes so named zones with DST settle at the wall clock;
+ * anything unparseable yields `undefined` rather than an invented instant.
  */
-function availableResetCount(value: unknown): number | undefined {
+function wallClockToIso(value: unknown, timeZone: string): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const match = ZAI_RESET_TIME_FORMAT.exec(value.trim());
+  if (!match) return undefined;
+  try {
+    const [, year, month, day, hour, minute, second] = match;
+    // Fixed-point search: find the instant whose offset in `timeZone` lands
+    // back on the wall clock. Two passes settle named zones with DST.
+    const wallAsUtc = Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second),
+    );
+    let instantMs = wallAsUtc;
+    for (let pass = 0; pass < 2; pass += 1) {
+      const corrected = wallAsUtc - zoneOffsetMs(timeZone, instantMs);
+      if (corrected === instantMs) break;
+      instantMs = corrected;
+    }
+    if (!Number.isFinite(instantMs)) return undefined;
+    return new Date(instantMs).toISOString();
+  } catch {
+    return undefined;
+  }
+}
+
+function zoneOffsetMs(timeZone: string, atMs: number): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date(atMs));
+  const value = (type: string): number => {
+    const part = parts.find((candidate) => candidate.type === type);
+    return part ? Number(part.value) : Number.NaN;
+  };
+  const asUtc = Date.UTC(
+    value("year"),
+    value("month") - 1,
+    value("day"),
+    value("hour"),
+    value("minute"),
+    value("second"),
+  );
+  return asUtc - atMs;
+}
+
+export function normalizeZaiResetList(
+  data: Record<string, unknown> | undefined,
+  timeZone: string = resolveResetClockTimeZone(),
+): NormalizedZaiResetList {
+  const fiveHour = resetTypeSummary(data?.fiveHourResets, timeZone);
+  const week = resetTypeSummary(data?.weekResets, timeZone);
+  return {
+    ...(fiveHour
+      ? {
+          fiveHourResetsAvailable: fiveHour.available,
+          ...(fiveHour.expireAt
+            ? { fiveHourResetsExpireAt: fiveHour.expireAt }
+            : {}),
+        }
+      : {}),
+    ...(week
+      ? {
+          weekResetsAvailable: week.available,
+          ...(week.expireAt ? { weekResetsExpireAt: week.expireAt } : {}),
+        }
+      : {}),
+  };
+}
+
+type ResetTypeSummary = {
+  available: number;
+  /** Ascending UTC ISO instants; present only when every card parsed. */
+  expireAt?: string[];
+};
+
+function resetTypeSummary(
+  value: unknown,
+  timeZone: string,
+): ResetTypeSummary | undefined {
   if (!Array.isArray(value)) return undefined;
-  return value.filter((entry) => objectValue(entry)?.available === true).length;
+  const available = value.filter(
+    (entry) => objectValue(entry)?.available === true,
+  );
+  const expireAt: string[] = [];
+  let allParseable = true;
+  for (const entry of available) {
+    const card = objectValue(entry);
+    const iso = card ? wallClockToIso(card.expireTime, timeZone) : undefined;
+    if (iso === undefined) {
+      allParseable = false;
+      continue;
+    }
+    expireAt.push(iso);
+  }
+  return {
+    available: available.length,
+    ...(allParseable ? { expireAt: [...expireAt].sort() } : {}),
+  };
 }
 
 function parseZaiEnvelope(bytes: Uint8Array): ZaiEnvelope {
