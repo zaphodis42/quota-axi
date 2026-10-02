@@ -412,6 +412,7 @@ function buildLiveCard(
             .find((window) => CODEX_ACCOUNT_WINDOW_ID.test(window.id)) ??
           provider.windows[provider.windows.length - 1])
         : undefined;
+    const resetCounts = bankedResetCounts(provider);
     for (const window of provider.windows) {
       lines.push(
         interior(
@@ -420,7 +421,9 @@ function buildLiveCard(
             generatedAtMs,
             provider.windows,
             show,
-            window === resetsWindow ? provider.resetsAvailable : undefined,
+            window === resetsWindow
+              ? provider.resetsAvailable
+              : resetCounts?.get(window.id),
           ),
           border,
         ),
@@ -681,6 +684,29 @@ function interior(content: Line, borderStyle: StyleName): Line {
 }
 
 const CODEX_ACCOUNT_WINDOW_ID = /^(?:(?:five_hour|weekly)(?:_\d+)?$|window:)/;
+
+/**
+ * Banked reset counts ride on the windows they reset: Z.ai Coding Plan's
+ * five-hour and weekly card counts land on their own rows. The counts exist
+ * only on a fresh vendor read — never cached — so stale and reused cards
+ * render none even if a hand-built report carries the fields.
+ */
+function bankedResetCounts(
+  provider: ProviderQuota,
+): Map<string, number> | undefined {
+  if (provider.provider !== "zai-coding-plan") return undefined;
+  if (provider.state.stale || provider.state.status !== "fresh") {
+    return undefined;
+  }
+  const counts = new Map<string, number>();
+  if (provider.fiveHourResetsAvailable !== undefined) {
+    counts.set("five_hour", provider.fiveHourResetsAvailable);
+  }
+  if (provider.weekResetsAvailable !== undefined) {
+    counts.set("weekly", provider.weekResetsAvailable);
+  }
+  return counts.size > 0 ? counts : undefined;
+}
 
 function windowRow(
   window: QuotaWindow,

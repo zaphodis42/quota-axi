@@ -304,6 +304,23 @@ export type ProviderQuota = {
   plan?: string;
   /** Number of banked Codex rate-limit resets the source reports available. */
   resetsAvailable?: number;
+  /**
+   * Banked Z.ai reset cards the vendor reports as still available, per reset
+   * type. Present only on a fresh reading: a card can be spent or granted at
+   * any moment, so the counts are never written to the cache.
+   */
+  fiveHourResetsAvailable?: number;
+  weekResetsAvailable?: number;
+  /**
+   * Expiry instants (UTC ISO) for each counted card, ascending, one per
+   * count. The vendor's timezone-less `expireTime` strings are read
+   * against the vendor's home clock, Asia/Singapore (UTC+8), confirmed by
+   * observation against the vendor console; the vendor string, not the
+   * conversion, is ground truth. The array is omitted for a type when any
+   * counted card lacks a parseable timestamp.
+   */
+  fiveHourResetsExpireAt?: string[];
+  weekResetsExpireAt?: string[];
   account?: {
     email?: string;
     organization?: string;

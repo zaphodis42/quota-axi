@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { providerFetch } from "../../src/lib/http.js";
+import { withQuotaSemantics } from "../../src/interpretation.js";
+import { renderQuotaToon } from "../../src/render.js";
 import {
   createZaiCodingPlanAdapter,
   normalizeZaiLimits,
+  normalizeZaiResetList,
 } from "../../src/providers/zai-coding-plan.js";
 import type {
   ZaiApiKeyCredentialInspection,
@@ -23,7 +26,7 @@ import type {
 vi.mock("../../src/lib/http.js", () => ({ providerFetch: vi.fn() }));
 
 const NOW = Date.parse("2027-02-03T04:05:06.000Z");
-const OPTIONS = { allowKeychainPrompt: false };
+const OPTIONS = { allowKeychainPrompt: false, refreshCredentials: false };
 
 // The exact payload verified against a live Pro-tier key in the issue.
 const SUCCESS_PAYLOAD = {
@@ -67,7 +70,7 @@ const SUCCESS_PAYLOAD = {
 };
 
 describe("Z.ai Coding Plan request transport", () => {
-  it("makes one fixed-origin read-only request with only the Pi-resolved key", async () => {
+  it("makes two fixed-origin read-only requests: quota first, then reset cards", async () => {
     const request = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
         jsonResponse(SUCCESS_PAYLOAD),
@@ -80,37 +83,44 @@ describe("Z.ai Coding Plan request transport", () => {
 
     const report = await adapter.fetchQuota(OPTIONS);
 
-    expect(request).toHaveBeenCalledTimes(1);
-    const [input, init] = request.mock.calls[0];
-    const url = new URL(String(input));
-    expect({
-      protocol: url.protocol,
-      hostname: url.hostname,
-      port: url.port || "443",
-      pathname: url.pathname,
-      search: url.search,
-      hash: url.hash,
-    }).toEqual({
-      protocol: "https:",
-      hostname: "api.z.ai",
-      port: "443",
-      pathname: "/api/monitor/usage/quota/limit",
-      search: "",
-      hash: "",
-    });
-    expect(init?.method).toBe("GET");
-    expect(init?.redirect).toBe("manual");
-    expect(init?.credentials).toBe("omit");
-    const headers = new Headers(init?.headers);
-    expect(headers.get("authorization")).toBe("Bearer synthetic-zai-key-741");
-    expect(headers.get("accept")).toBe("application/json");
-    expect(headers.get("user-agent")).toMatch(/^quota-axi\/\d+\.\d+\.\d+$/);
-    expect(headers.get("cookie")).toBeNull();
+    expect(request).toHaveBeenCalledTimes(2);
+    const urls = request.mock.calls.map(([input]) => new URL(String(input)));
     expect(
-      [...headers.keys()].some((name) =>
-        /device|fingerprint|account|session/i.test(name),
-      ),
-    ).toBe(false);
+      urls.map(({ protocol, hostname, pathname, search }) => ({
+        protocol,
+        hostname,
+        pathname,
+        search,
+      })),
+    ).toEqual([
+      {
+        protocol: "https:",
+        hostname: "api.z.ai",
+        pathname: "/api/monitor/usage/quota/limit",
+        search: "",
+      },
+      {
+        protocol: "https:",
+        hostname: "api.z.ai",
+        pathname: "/api/biz/customer-package-reset/list",
+        search: "?targetType=PERSONAL",
+      },
+    ]);
+    for (const [, init] of request.mock.calls) {
+      expect(init?.method).toBe("GET");
+      expect(init?.redirect).toBe("manual");
+      expect(init?.credentials).toBe("omit");
+      const headers = new Headers(init?.headers);
+      expect(headers.get("authorization")).toBe("Bearer synthetic-zai-key-741");
+      expect(headers.get("accept")).toBe("application/json");
+      expect(headers.get("user-agent")).toMatch(/^quota-axi\/\d+\.\d+\.\d+$/);
+      expect(headers.get("cookie")).toBeNull();
+      expect(
+        [...headers.keys()].some((name) =>
+          /device|fingerprint|account|session/i.test(name),
+        ),
+      ).toBe(false);
+    }
     expect(report).toMatchObject({
       provider: "zai-coding-plan",
       label: "Z.ai Coding Plan",
@@ -128,7 +138,7 @@ describe("Z.ai Coding Plan request transport", () => {
     expect(apiKeySource.resolve).not.toHaveBeenCalled();
   });
 
-  it("routes the quota request through the shared providerFetch transport", async () => {
+  it("routes both requests through the shared providerFetch transport", async () => {
     vi.mocked(providerFetch).mockImplementation(async () =>
       jsonResponse(SUCCESS_PAYLOAD),
     );
@@ -144,9 +154,20 @@ describe("Z.ai Coding Plan request transport", () => {
       now: () => NOW,
     }).fetchQuota(OPTIONS);
 
-    expect(providerFetch).toHaveBeenCalledTimes(1);
-    expect(providerFetch).toHaveBeenCalledWith(
+    expect(providerFetch).toHaveBeenCalledTimes(2);
+    expect(providerFetch).toHaveBeenNthCalledWith(
+      1,
       "https://api.z.ai/api/monitor/usage/quota/limit",
+      expect.objectContaining({
+        method: "GET",
+        credentials: "omit",
+        redirect: "manual",
+      }),
+      { retryOverIpv4: true },
+    );
+    expect(providerFetch).toHaveBeenNthCalledWith(
+      2,
+      "https://api.z.ai/api/biz/customer-package-reset/list?targetType=PERSONAL",
       expect.objectContaining({
         method: "GET",
         credentials: "omit",
@@ -811,6 +832,314 @@ describe("Z.ai Coding Plan deadline enforcement", () => {
   });
 });
 
+describe("Z.ai Coding Plan banked reset cards", () => {
+  const RESET_LIST_PATH = "/api/biz/customer-package-reset/list";
+  // UTC+8: the vendor's home clock that the provider pins reset-card
+  // expiry instants to; injected so expected instants stay deterministic
+  // regardless of the machine running the tests.
+  const TEST_TIME_ZONE = "Asia/Singapore";
+
+  // Shape captured from the live list endpoint; every identifier is
+  // synthetic.
+  function resetCard(overrides: Record<string, unknown> = {}) {
+    return {
+      recordId: 1_231_924,
+      grantType: "DIRECT",
+      expireTime: "2026-10-28 12:49:06",
+      available: true,
+      ...overrides,
+    };
+  }
+
+  const RESET_LIST_PAYLOAD = {
+    code: 200,
+    msg: "Operation successful",
+    data: {
+      customerId: 1_234_567_890_123_456,
+      targetType: "PERSONAL",
+      organizationId: null,
+      projectId: null,
+      lastFiveHourResetTime: null,
+      lastWeekResetTime: null,
+      fiveHourResets: [
+        resetCard(),
+        resetCard({ recordId: 1_231_925 }),
+        resetCard({ recordId: 1_231_926 }),
+        resetCard({ recordId: 1_231_927 }),
+      ],
+      weekResets: [
+        resetCard({ recordId: 160_469, expireTime: "2026-10-01 23:59:59" }),
+        resetCard({ recordId: 651_873, expireTime: "2026-10-18 21:21:30" }),
+        resetCard({ recordId: 1_231_920 }),
+      ],
+    },
+    success: true,
+  };
+
+  function dualFetch(
+    resetPayload: unknown,
+    quotaPayload: unknown = SUCCESS_PAYLOAD,
+  ) {
+    return vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      return jsonResponse(
+        url.pathname === RESET_LIST_PATH ? resetPayload : quotaPayload,
+      );
+    });
+  }
+
+  function resetTestAdapter(
+    overrides: Parameters<typeof createZaiCodingPlanAdapter>[0] = {},
+  ) {
+    return testAdapter({
+      resetTimeZone: () => TEST_TIME_ZONE,
+      ...overrides,
+    });
+  }
+
+  it("counts only the vendor's available cards, per reset type", async () => {
+    const report = await resetTestAdapter({
+      fetch: dualFetch({
+        ...RESET_LIST_PAYLOAD,
+        data: {
+          ...RESET_LIST_PAYLOAD.data,
+          fiveHourResets: [
+            resetCard(),
+            resetCard({ recordId: 2, available: false }),
+            resetCard({ recordId: 3 }),
+          ],
+          weekResets: [resetCard({ recordId: 4 })],
+        },
+      }),
+    }).fetchQuota(OPTIONS);
+
+    expect(report.state.status).toBe("fresh");
+    expect(report.fiveHourResetsAvailable).toBe(2);
+    expect(report.weekResetsAvailable).toBe(1);
+    expect(report.fiveHourResetsExpireAt).toEqual([
+      "2026-10-28T04:49:06.000Z",
+      "2026-10-28T04:49:06.000Z",
+    ]);
+    expect(report.weekResetsExpireAt).toEqual(["2026-10-28T04:49:06.000Z"]);
+  });
+
+  it("reads every counted card's expiry as an ascending UTC instant", async () => {
+    const report = await resetTestAdapter({
+      fetch: dualFetch(RESET_LIST_PAYLOAD),
+    }).fetchQuota(OPTIONS);
+
+    expect(report.fiveHourResetsAvailable).toBe(4);
+    expect(report.weekResetsAvailable).toBe(3);
+    expect(report.fiveHourResetsExpireAt).toEqual([
+      "2026-10-28T04:49:06.000Z",
+      "2026-10-28T04:49:06.000Z",
+      "2026-10-28T04:49:06.000Z",
+      "2026-10-28T04:49:06.000Z",
+    ]);
+    expect(report.weekResetsExpireAt).toEqual([
+      "2026-10-01T15:59:59.000Z",
+      "2026-10-18T13:21:30.000Z",
+      "2026-10-28T04:49:06.000Z",
+    ]);
+  });
+
+  it("reports a vendor-supplied empty list as zero and a missing list as no field", async () => {
+    const empty = await resetTestAdapter({
+      fetch: dualFetch({
+        ...RESET_LIST_PAYLOAD,
+        data: {
+          ...RESET_LIST_PAYLOAD.data,
+          fiveHourResets: [],
+          weekResets: [],
+        },
+      }),
+    }).fetchQuota(OPTIONS);
+    expect(empty.fiveHourResetsAvailable).toBe(0);
+    expect(empty.weekResetsAvailable).toBe(0);
+    expect(empty.fiveHourResetsExpireAt).toEqual([]);
+    expect(empty.weekResetsExpireAt).toEqual([]);
+
+    const missing = await resetTestAdapter({
+      fetch: dualFetch({
+        ...RESET_LIST_PAYLOAD,
+        data: { customerId: 1, targetType: "PERSONAL" },
+      }),
+    }).fetchQuota(OPTIONS);
+    expect(missing).not.toHaveProperty("fiveHourResetsAvailable");
+    expect(missing).not.toHaveProperty("weekResetsAvailable");
+    expect(missing).not.toHaveProperty("fiveHourResetsExpireAt");
+    expect(missing).not.toHaveProperty("weekResetsExpireAt");
+  });
+
+  it("keeps a type's count but omits its expiries when a timestamp is unparseable", async () => {
+    const report = await resetTestAdapter({
+      fetch: dualFetch({
+        ...RESET_LIST_PAYLOAD,
+        data: {
+          ...RESET_LIST_PAYLOAD.data,
+          fiveHourResets: [
+            resetCard(),
+            resetCard({ recordId: 2, expireTime: "not-a-date" }),
+            resetCard({ recordId: 3, expireTime: undefined }),
+          ],
+          weekResets: [resetCard({ recordId: 4 })],
+        },
+      }),
+    }).fetchQuota(OPTIONS);
+
+    expect(report.state.status).toBe("fresh");
+    expect(report.fiveHourResetsAvailable).toBe(3);
+    expect(report).not.toHaveProperty("fiveHourResetsExpireAt");
+    expect(report.weekResetsAvailable).toBe(1);
+    expect(report.weekResetsExpireAt).toEqual(["2026-10-28T04:49:06.000Z"]);
+  });
+
+  it("keeps the quota reading fresh when the reset-card request fails", async () => {
+    const request = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === RESET_LIST_PATH) {
+        throw new Error("connection refused");
+      }
+      return jsonResponse(SUCCESS_PAYLOAD);
+    });
+    const report = await resetTestAdapter({ fetch: request }).fetchQuota(
+      OPTIONS,
+    );
+
+    expect(report.state.status).toBe("fresh");
+    expect(report.windows).toHaveLength(3);
+    expect(report).not.toHaveProperty("fiveHourResetsAvailable");
+    expect(report).not.toHaveProperty("weekResetsAvailable");
+    expect(report).not.toHaveProperty("fiveHourResetsExpireAt");
+    expect(report).not.toHaveProperty("weekResetsExpireAt");
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it("omits the counts on a non-success reset envelope without touching state", async () => {
+    const report = await resetTestAdapter({
+      fetch: dualFetch({ code: 401, msg: "unauthorized", success: false }),
+    }).fetchQuota(OPTIONS);
+
+    expect(report.state.status).toBe("fresh");
+    expect(report.state.error).toBeUndefined();
+    expect(report).not.toHaveProperty("fiveHourResetsAvailable");
+    expect(report).not.toHaveProperty("weekResetsAvailable");
+    expect(report).not.toHaveProperty("fiveHourResetsExpireAt");
+    expect(report).not.toHaveProperty("weekResetsExpireAt");
+  });
+
+  it("never queries the reset-card mutation endpoints", async () => {
+    const request = dualFetch(RESET_LIST_PAYLOAD);
+    await resetTestAdapter({ fetch: request }).fetchQuota(OPTIONS);
+
+    const paths = request.mock.calls.map(
+      ([input]) => new URL(String(input)).pathname,
+    );
+    expect(paths).toEqual(["/api/monitor/usage/quota/limit", RESET_LIST_PATH]);
+  });
+
+  it("normalizes the reset list directly against an explicit zone", () => {
+    expect(
+      normalizeZaiResetList(
+        {
+          fiveHourResets: [
+            { recordId: 1, available: true, expireTime: "2026-10-28 12:49:06" },
+            {
+              recordId: 2,
+              available: false,
+              expireTime: "2026-10-28 12:49:06",
+            },
+          ],
+          weekResets: [
+            { recordId: 4, available: true, expireTime: "2026-10-01 23:59:59" },
+          ],
+        },
+        "Asia/Singapore",
+      ),
+    ).toEqual({
+      fiveHourResetsAvailable: 1,
+      fiveHourResetsExpireAt: ["2026-10-28T04:49:06.000Z"],
+      weekResetsAvailable: 1,
+      weekResetsExpireAt: ["2026-10-01T15:59:59.000Z"],
+    });
+    expect(
+      normalizeZaiResetList(
+        {
+          weekResets: [
+            { recordId: 4, available: true, expireTime: "2026-10-28 12:49:06" },
+          ],
+        },
+        "UTC",
+      ),
+    ).toEqual({
+      weekResetsAvailable: 1,
+      weekResetsExpireAt: ["2026-10-28T12:49:06.000Z"],
+    });
+    expect(
+      normalizeZaiResetList(
+        {
+          weekResets: [
+            { recordId: 4, available: true, expireTime: "2026-07-06 12:00:00" },
+          ],
+        },
+        "America/New_York",
+      ),
+    ).toEqual({
+      weekResetsAvailable: 1,
+      // EDT in July: the wall clock settles at UTC-4, not the winter offset.
+      weekResetsExpireAt: ["2026-07-06T16:00:00.000Z"],
+    });
+    expect(normalizeZaiResetList(undefined, "UTC")).toEqual({});
+    expect(
+      normalizeZaiResetList({ weekResets: "not-an-array" }, "UTC"),
+    ).toEqual({});
+  });
+
+  it("renders a resets_available attention row for the fresh reading", async () => {
+    const generatedAt = new Date(NOW).toISOString();
+    const report: ProviderQuota = {
+      provider: "zai-coding-plan",
+      source: "api",
+      fiveHourResetsAvailable: 4,
+      weekResetsAvailable: 3,
+      fiveHourResetsExpireAt: [
+        "2026-10-28T04:49:06.000Z",
+        "2026-10-28T04:49:06.000Z",
+        "2026-10-28T04:49:06.000Z",
+        "2026-10-28T04:49:06.000Z",
+      ],
+      weekResetsExpireAt: [
+        "2026-10-01T15:59:59.000Z",
+        "2026-10-18T13:21:30.000Z",
+        "2026-10-28T04:49:06.000Z",
+      ],
+      windows: [
+        { id: "five_hour", label: "session", kind: "session", percentUsed: 10 },
+      ],
+      state: {
+        status: "fresh",
+        stale: false,
+        refreshedAt: generatedAt,
+        sourcesTried: ["pi:zai"],
+      },
+    };
+    const toon = renderQuotaToon(
+      {
+        generatedAt,
+        schemaVersion: 5,
+        providers: [withQuotaSemantics(report, generatedAt)],
+      },
+      "quota-axi",
+      false,
+    );
+
+    expect(toon).toContain("resets_available");
+    expect(toon).toContain(
+      "4 five-hour · 3 weekly banked resets · earliest expires 2026-10-01T15:59:59.000Z",
+    );
+  });
+});
+
 describe("Z.ai Coding Plan in-flight de-duplication", () => {
   it("shares one request across concurrent fetchQuota calls", async () => {
     const request = vi.fn(async () => jsonResponse(SUCCESS_PAYLOAD));
@@ -821,7 +1150,7 @@ describe("Z.ai Coding Plan in-flight de-duplication", () => {
       adapter.fetchQuota(OPTIONS),
     ]);
 
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledTimes(2);
     expect(first).toEqual(second);
   });
 });
