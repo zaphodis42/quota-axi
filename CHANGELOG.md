@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.4](https://github.com/zaphodis42/quota-axi/compare/quota-axi-v0.1.3...quota-axi-v0.1.4) (2026-10-02)
+
+
+### Features
+
+* **codex:** report available banked resets ([e4b6e54](https://github.com/zaphodis42/quota-axi/commit/e4b6e540e8c7329e3b9921a93fe6773ce94f700b))
+* **tui:** show zai banked reset counts on their window rows ([e326f10](https://github.com/zaphodis42/quota-axi/commit/e326f10383f7cdb4251ed9c8fbdc91bc272e5ab0))
+* **zai-coding-plan:** report banked reset-card counts ([3e1169d](https://github.com/zaphodis42/quota-axi/commit/3e1169d73354c8a7854025a7a971f8d9fd2698ca))
+* **zai-coding-plan:** report banked reset-card counts ([231d560](https://github.com/zaphodis42/quota-axi/commit/231d560d57c4f807cddcb485cb75118dc8461d25))
+* **zai-coding-plan:** surface banked reset-card expiry instants ([9f3e2b4](https://github.com/zaphodis42/quota-axi/commit/9f3e2b4f47c854042c2b301d823208ca326cb216))
+
+
+### Bug Fixes
+
+* **codex:** report banked resets only from a fresh reading ([5cf78df](https://github.com/zaphodis42/quota-axi/commit/5cf78df6a1b09d719c7297345f677842e6c1d848))
+* **tui:** bound the Codex reset count to keep card width ([dbe5fb6](https://github.com/zaphodis42/quota-axi/commit/dbe5fb6a7d48ab5df11ab76f53d75990ab03d984))
+* **zai-coding-plan:** pin reset-card clock to the vendor zone ([71054c3](https://github.com/zaphodis42/quota-axi/commit/71054c32d349b840580606236e722f38136c07a0))
+
 ## [0.1.3](https://github.com/zaphodis42/quota-axi/compare/quota-axi-v0.1.2...quota-axi-v0.1.3) (2026-09-26)
 
 
